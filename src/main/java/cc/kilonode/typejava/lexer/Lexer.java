@@ -77,6 +77,22 @@ public final class Lexer {
           advance();
           tokens.add(new Token(TokenType.PLUS, "+", null, tokenLine, tokenColumn));
         }
+        case '-' -> {
+          advance();
+          tokens.add(new Token(TokenType.MINUS, "-", null, tokenLine, tokenColumn));
+        }
+        case '*' -> {
+          advance();
+          tokens.add(new Token(TokenType.STAR, "*", null, tokenLine, tokenColumn));
+        }
+        case '/' -> {
+          advance();
+          tokens.add(new Token(TokenType.SLASH, "/", null, tokenLine, tokenColumn));
+        }
+        case '%' -> {
+          advance();
+          tokens.add(new Token(TokenType.PERCENT, "%", null, tokenLine, tokenColumn));
+        }
         case '=' -> {
           advance();
           TokenType type = match('=') ? TokenType.EQEQ : TokenType.ASSIGN;

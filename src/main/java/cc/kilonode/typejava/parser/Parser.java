@@ -13,10 +13,14 @@ import cc.kilonode.typejava.ast.IfStatement;
 import cc.kilonode.typejava.ast.MemberExpression;
 import cc.kilonode.typejava.ast.NamedType;
 import cc.kilonode.typejava.ast.NumericLiteral;
+import cc.kilonode.typejava.ast.ObjectField;
+import cc.kilonode.typejava.ast.ObjectLiteral;
 import cc.kilonode.typejava.ast.ObjectType;
 import cc.kilonode.typejava.ast.Parameter;
 import cc.kilonode.typejava.ast.Program;
 import cc.kilonode.typejava.ast.ReturnStatement;
+import cc.kilonode.typejava.ast.SourceMap;
+import cc.kilonode.typejava.ast.SourceSpan;
 import cc.kilonode.typejava.ast.Statement;
 import cc.kilonode.typejava.ast.StringLiteral;
 import cc.kilonode.typejava.ast.TypeAliasDeclaration;
@@ -28,10 +32,12 @@ import cc.kilonode.typejava.ast.VariableKind;
 import cc.kilonode.typejava.lexer.Token;
 import cc.kilonode.typejava.lexer.TokenType;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
 
 public final class Parser {
   private final List<Token> tokens;
+  private final IdentityHashMap<Object, SourceSpan> spans = new IdentityHashMap<>();
   private int current;
 
   public Parser(List<Token> tokens) {
@@ -39,6 +45,9 @@ public final class Parser {
   }
 
   public Program parse() {
+    current = 0;
+    spans.clear();
+
     List<TypeAliasDeclaration> typeDeclarations = new ArrayList<>();
     List<Statement> statements = new ArrayList<>();
 
@@ -50,10 +59,18 @@ public final class Parser {
       }
     }
 
-    return new Program(typeDeclarations, statements);
+    Program program = new Program(typeDeclarations, statements);
+    spans.put(program, span(tokens.get(0), tokens.get(tokens.size() - 1)));
+    return program;
+  }
+
+  public ParseResult parseWithSourceMap() {
+    Program program = parse();
+    return new ParseResult(program, new SourceMap(spans));
   }
 
   private TypeAliasDeclaration typeAliasDeclaration() {
+    Token start = peek();
     consume(TokenType.TYPE, "Expected 'type'");
     Token name = consume(TokenType.IDENTIFIER, "Expected type name after 'type'");
     consume(TokenType.ASSIGN, "Expected '=' after type name");
@@ -61,7 +78,7 @@ public final class Parser {
     consume(
         TokenType.SEMICOLON,
         "Expected ';' after type declaration (maybe you forgot a semicolon)");
-    return new TypeAliasDeclaration(name.lexeme(), type);
+    return located(new TypeAliasDeclaration(name.lexeme(), type), start);
   }
 
   private Statement statement() {
@@ -77,13 +94,14 @@ public final class Parser {
     if (check(TokenType.LBRACE)) {
       return block();
     }
-    if (match(TokenType.RETURN)) {
+    if (check(TokenType.RETURN)) {
       return returnStatement();
     }
     return expressionStatement();
   }
 
   private FunctionDeclaration functionDeclaration() {
+    Token start = peek();
     consume(TokenType.FUNCTION, "Expected 'function'");
     Token name = consume(TokenType.IDENTIFIER, "Expected function name after 'function'");
     consume(TokenType.LPAREN, "Expected '(' after function name");
@@ -96,13 +114,17 @@ public final class Parser {
         TokenType.SEMICOLON,
         "Expected ';' after function declaration (maybe you forgot a semicolon)");
 
-    return new FunctionDeclaration(name.lexeme(), parameters, returnType, body);
+    return located(new FunctionDeclaration(name.lexeme(), parameters, returnType, body), start);
   }
 
   private VariableDeclaration variableDeclaration() {
+    Token start = peek();
     Token keyword = advance();
     VariableKind kind = keyword.type() == TokenType.LET ? VariableKind.LET : VariableKind.CONST;
-    Token name = consume(TokenType.IDENTIFIER, "Expected variable name after '" + keyword.lexeme() + "'");
+    Token name =
+        consume(
+            TokenType.IDENTIFIER,
+            "Expected variable name after '" + keyword.lexeme() + "'");
     consume(
         TokenType.COLON,
         "Expected ':' and a type annotation for variable '" + name.lexeme() + "'");
@@ -115,10 +137,11 @@ public final class Parser {
         TokenType.SEMICOLON,
         "Expected ';' after variable declaration (maybe you forgot a semicolon)");
 
-    return new VariableDeclaration(kind, name.lexeme(), type, initializer);
+    return located(new VariableDeclaration(kind, name.lexeme(), type, initializer), start);
   }
 
   private IfStatement ifStatement() {
+    Token start = peek();
     consume(TokenType.IF, "Expected 'if'");
     consume(TokenType.LPAREN, "Expected '(' after 'if'");
     Expression condition = expression();
@@ -130,7 +153,7 @@ public final class Parser {
       elseBranch = check(TokenType.IF) ? ifStatement() : block();
     }
 
-    return new IfStatement(condition, thenBranch, elseBranch);
+    return located(new IfStatement(condition, thenBranch, elseBranch), start);
   }
 
   private List<Parameter> parameters() {
@@ -146,19 +169,22 @@ public final class Parser {
   }
 
   private Parameter parameter() {
+    Token start = peek();
     Token name = consume(TokenType.IDENTIFIER, "Expected parameter name");
     consume(
         TokenType.COLON,
         "Expected ':' and a type annotation for parameter '" + name.lexeme() + "'");
-    return new Parameter(name.lexeme(), type());
+    return located(new Parameter(name.lexeme(), type()), start);
   }
 
   private TypeReference type() {
-    if (match(TokenType.IDENTIFIER)) {
-      return new NamedType(previous().lexeme());
+    if (check(TokenType.IDENTIFIER)) {
+      Token start = advance();
+      return located(new NamedType(start.lexeme()), start);
     }
-    if (match(TokenType.LBRACE)) {
-      return objectType();
+    if (check(TokenType.LBRACE)) {
+      Token start = advance();
+      return located(objectType(), start);
     }
     throw error(peek(), "Expected a type name or object type");
   }
@@ -175,7 +201,7 @@ public final class Parser {
       consume(
           TokenType.SEMICOLON,
           "Expected ';' after field '" + name.lexeme() + "'");
-      fields.add(new TypeField(name.lexeme(), type));
+      fields.add(located(new TypeField(name.lexeme(), type), name));
     }
 
     consume(TokenType.RBRACE, "Expected '}' after object type");
@@ -183,6 +209,7 @@ public final class Parser {
   }
 
   private BlockStatement block() {
+    Token start = peek();
     consume(TokenType.LBRACE, "Expected '{' to start a block");
     List<Statement> statements = new ArrayList<>();
 
@@ -191,19 +218,22 @@ public final class Parser {
     }
 
     consume(TokenType.RBRACE, "Expected '}' after block");
-    return new BlockStatement(statements);
+    return located(new BlockStatement(statements), start);
   }
 
   private ReturnStatement returnStatement() {
+    Token start = peek();
+    consume(TokenType.RETURN, "Expected 'return'");
     Expression value = expression();
     consume(TokenType.SEMICOLON, "Expected ';' after return value (maybe you forgot a semicolon)");
-    return new ReturnStatement(value);
+    return located(new ReturnStatement(value), start);
   }
 
   private ExpressionStatement expressionStatement() {
+    Token start = peek();
     Expression expression = expression();
     consume(TokenType.SEMICOLON, "Expected ';' after expression (maybe you forgot a semicolon)");
-    return new ExpressionStatement(expression);
+    return located(new ExpressionStatement(expression), start);
   }
 
   private Expression expression() {
@@ -212,49 +242,55 @@ public final class Parser {
 
   private Expression assignment() {
     if (check(TokenType.IDENTIFIER) && checkNext(TokenType.ASSIGN)) {
+      Token start = peek();
       Token name = advance();
+      Identifier target = located(new Identifier(name.lexeme()), name, name);
       advance();
       Expression value = assignment();
-      return new AssignmentExpression(new Identifier(name.lexeme()), value);
+      return located(new AssignmentExpression(target, value), start);
     }
 
     return logicalOr();
   }
 
   private Expression logicalOr() {
+    Token start = peek();
     Expression expression = logicalAnd();
 
     while (match(TokenType.OROR)) {
       String operator = previous().lexeme();
-      expression = new BinaryExpression(expression, operator, logicalAnd());
+      expression = located(new BinaryExpression(expression, operator, logicalAnd()), start);
     }
 
     return expression;
   }
 
   private Expression logicalAnd() {
+    Token start = peek();
     Expression expression = equality();
 
     while (match(TokenType.ANDAND)) {
       String operator = previous().lexeme();
-      expression = new BinaryExpression(expression, operator, equality());
+      expression = located(new BinaryExpression(expression, operator, equality()), start);
     }
 
     return expression;
   }
 
   private Expression equality() {
+    Token start = peek();
     Expression expression = comparison();
 
     while (match(TokenType.EQEQ) || match(TokenType.BANGEQ)) {
       String operator = previous().lexeme();
-      expression = new BinaryExpression(expression, operator, comparison());
+      expression = located(new BinaryExpression(expression, operator, comparison()), start);
     }
 
     return expression;
   }
 
   private Expression comparison() {
+    Token start = peek();
     Expression expression = additive();
 
     while (match(TokenType.LT)
@@ -262,41 +298,69 @@ public final class Parser {
         || match(TokenType.GT)
         || match(TokenType.GTE)) {
       String operator = previous().lexeme();
-      expression = new BinaryExpression(expression, operator, additive());
+      expression = located(new BinaryExpression(expression, operator, additive()), start);
     }
 
     return expression;
   }
 
   private Expression additive() {
+    Token start = peek();
+    Expression expression = multiplicative();
+
+    while (check(TokenType.PLUS) || check(TokenType.MINUS)) {
+      Token operator = advance();
+      rejectConsecutiveMinus(operator);
+      expression =
+          located(
+              new BinaryExpression(expression, operator.lexeme(), multiplicative()), start);
+    }
+
+    return expression;
+  }
+
+  private Expression multiplicative() {
+    Token start = peek();
     Expression expression = unary();
 
-    while (match(TokenType.PLUS)) {
+    while (match(TokenType.STAR) || match(TokenType.SLASH) || match(TokenType.PERCENT)) {
       String operator = previous().lexeme();
-      expression = new BinaryExpression(expression, operator, unary());
+      expression = located(new BinaryExpression(expression, operator, unary()), start);
     }
 
     return expression;
   }
 
   private Expression unary() {
-    if (match(TokenType.BANG)) {
-      String operator = previous().lexeme();
-      return new UnaryExpression(operator, unary());
+    Token start = peek();
+
+    if (check(TokenType.BANG) || check(TokenType.MINUS)) {
+      Token operator = advance();
+      rejectConsecutiveMinus(operator);
+      return located(new UnaryExpression(operator.lexeme(), unary()), start);
     }
 
     return postfix();
   }
 
+  private void rejectConsecutiveMinus(Token operator) {
+    if (operator.type() == TokenType.MINUS && check(TokenType.MINUS)) {
+      throw error(
+          peek(),
+          "Consecutive '-' is not allowed; use parentheses, e.g. (-a)");
+    }
+  }
+
   private Expression postfix() {
+    Token start = peek();
     Expression expression = primary();
 
     while (true) {
       if (match(TokenType.DOT)) {
         Token property = consume(TokenType.IDENTIFIER, "Expected a property name after '.'");
-        expression = new MemberExpression(expression, property.lexeme());
+        expression = located(new MemberExpression(expression, property.lexeme()), start);
       } else if (match(TokenType.LPAREN)) {
-        expression = new CallExpression(expression, arguments());
+        expression = located(new CallExpression(expression, arguments()), start);
       } else {
         break;
       }
@@ -319,28 +383,75 @@ public final class Parser {
   }
 
   private Expression primary() {
-    if (match(TokenType.IDENTIFIER)) {
-      return new Identifier(previous().lexeme());
+    if (check(TokenType.IDENTIFIER)) {
+      Token token = advance();
+      return located(new Identifier(token.lexeme()), token);
     }
-    if (match(TokenType.NUMBER)) {
-      return new NumericLiteral(previous().lexeme());
+    if (check(TokenType.NUMBER)) {
+      Token token = advance();
+      return located(new NumericLiteral(token.lexeme()), token);
     }
-    if (match(TokenType.STRING)) {
-      return new StringLiteral(previous().value());
+    if (check(TokenType.STRING)) {
+      Token token = advance();
+      return located(new StringLiteral(token.value()), token);
     }
-    if (match(TokenType.TRUE)) {
-      return new BooleanLiteral(true);
+    if (check(TokenType.TRUE)) {
+      Token token = advance();
+      return located(new BooleanLiteral(true), token);
     }
-    if (match(TokenType.FALSE)) {
-      return new BooleanLiteral(false);
+    if (check(TokenType.FALSE)) {
+      Token token = advance();
+      return located(new BooleanLiteral(false), token);
     }
-    if (match(TokenType.LPAREN)) {
+    if (check(TokenType.LPAREN)) {
+      Token start = advance();
       Expression expression = expression();
       consume(TokenType.RPAREN, "Expected ')' after expression");
+      spans.put(expression, span(start, previous()));
       return expression;
+    }
+    if (check(TokenType.LBRACE)) {
+      Token start = advance();
+      return located(objectLiteral(), start);
     }
 
     throw error(peek(), "Expected expression");
+  }
+
+  private ObjectLiteral objectLiteral() {
+    List<ObjectField> fields = new ArrayList<>();
+
+    while (!check(TokenType.RBRACE) && !check(TokenType.EOF)) {
+      Token name = consume(TokenType.IDENTIFIER, "Expected field name in object literal");
+      consume(
+          TokenType.COLON,
+          "Expected ':' after object field name '" + name.lexeme() + "'");
+      fields.add(located(new ObjectField(name.lexeme(), expression()), name));
+
+      if (!match(TokenType.COMMA)) {
+        break;
+      }
+    }
+
+    consume(TokenType.RBRACE, "Expected '}' after object literal");
+    return new ObjectLiteral(fields);
+  }
+
+  private <T> T located(T node, Token start) {
+    return located(node, start, previous());
+  }
+
+  private <T> T located(T node, Token start, Token end) {
+    spans.put(node, span(start, end));
+    return node;
+  }
+
+  private SourceSpan span(Token start, Token end) {
+    return new SourceSpan(
+        start.line(),
+        start.column(),
+        end.line(),
+        end.column() + end.lexeme().length());
   }
 
   private boolean match(TokenType type) {

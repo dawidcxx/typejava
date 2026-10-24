@@ -7,6 +7,21 @@ import org.junit.jupiter.api.Test;
 
 class LexerOperatorTest {
   @Test
+  void tokenizesArithmeticOperators() {
+    List<Token> tokens = new Lexer("+ - * / %").tokenize();
+
+    assertEquals(
+        List.of(
+            TokenType.PLUS,
+            TokenType.MINUS,
+            TokenType.STAR,
+            TokenType.SLASH,
+            TokenType.PERCENT,
+            TokenType.EOF),
+        tokens.stream().map(Token::type).toList());
+  }
+
+  @Test
   void tokenizesAssignmentAndEqualityOperators() {
     List<Token> tokens = new Lexer("= == != < <= > >=").tokenize();
 

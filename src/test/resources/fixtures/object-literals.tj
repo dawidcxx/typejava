@@ -1,0 +1,7 @@
+type Point = { x: number; y: number; };
+
+function make(x: number, y: number): Point {
+  return { x: x, y: y };
+};
+
+console.log(make(1, 2).x);

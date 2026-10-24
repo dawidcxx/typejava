@@ -9,4 +9,8 @@ final class ParserTestSupport {
   static Program parse(String source) {
     return new Parser(new Lexer(source).tokenize()).parse();
   }
+
+  static ParseResult parseWithSourceMap(String source) {
+    return new Parser(new Lexer(source).tokenize()).parseWithSourceMap();
+  }
 }

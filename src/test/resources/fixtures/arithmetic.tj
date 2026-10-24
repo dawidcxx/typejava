@@ -1,0 +1,6 @@
+function calc(a: number, b: number): number {
+  const result: number = a * b + a / b - (-a) % 2;
+  return result;
+};
+
+console.log(calc(6, 2));
