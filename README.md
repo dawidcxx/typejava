@@ -38,7 +38,7 @@ repositories {
 }
 
 dependencies {
-    implementation("cc.kilonode:typejava:0.1.0")
+    implementation("cc.kilonode:typejava:0.2.0")
 }
 ```
 
@@ -59,7 +59,7 @@ Then depend on it:
 <dependency>
   <groupId>cc.kilonode</groupId>
   <artifactId>typejava</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
 </dependency>
 ```
 
@@ -72,7 +72,7 @@ packages.
 Download `typejava-<version>-all.jar` from Releases:
 
 ```bash
-java -jar typejava-0.1.0-all.jar script.tj
+java -jar typejava-0.2.0-all.jar script.tj
 ```
 
 ### Java API

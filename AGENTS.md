@@ -7,6 +7,15 @@ pipeline is lexer -> parser -> checker -> ASM code generator -> generated classl
 
 Keep `README.md` user-facing. Put development, release, CI, and maintenance details here.
 
+## Modules
+
+- `:lib` — compiler, runtime, and public `TypeJava.run` API. This is the only published module.
+- `:cli` — command-line entry point, thin CLI jar, and self-contained fat jar. Depends on `:lib`.
+- `:examples` — runnable public-API demos. Depends only on `:lib`.
+
+Dependency direction is `:cli -> :lib` and `:examples -> :lib`. `:lib` must not depend on either.
+Do not publish `:cli` or `:examples` yet.
+
 ## Commands
 
 Use the Nix dev shell:
@@ -16,26 +25,50 @@ nix develop --command gradle check
 nix develop --command gradle build
 ```
 
-`build` runs tests, produces the thin library jar, sources/javadoc jars, and the fat CLI jar.
+`build` runs all module tests, produces the thin library jar, sources/javadoc jars, and the fat CLI
+jar.
+
+Run the CLI:
+
+```bash
+nix develop --command gradle :cli:run --args="path/to/script.tj"
+```
+
+Run all examples:
+
+```bash
+nix develop --command gradle :examples:run
+```
+
+Run one example:
+
+```bash
+nix develop --command gradle :examples:run --args="objects"
+```
 
 Update lexer snapshots when token output intentionally changes:
 
 ```bash
 nix develop --command env UPDATE_SNAPSHOTS=true \
-  gradle test --tests 'cc.kilonode.typejava.lexer.LexerSnapshotTest' --rerun-tasks
+  gradle :lib:test --tests 'cc.kilonode.typejava.lexer.LexerSnapshotTest' --rerun-tasks
 ```
 
 Always run `nix develop --command gradle build` before finishing a change.
 
 ## Build outputs
 
-- `build/libs/typejava-<version>.jar` — thin library jar for Maven consumers
-- `build/libs/typejava-<version>-sources.jar`
-- `build/libs/typejava-<version>-javadoc.jar`
-- `build/libs/typejava-<version>-all.jar` — self-contained CLI jar
+- `lib/build/libs/typejava-<version>.jar` — thin library jar for Maven consumers
+- `lib/build/libs/typejava-<version>-sources.jar`
+- `lib/build/libs/typejava-<version>-javadoc.jar`
+- `cli/build/libs/typejava-<version>-all.jar` — self-contained CLI jar
+- `examples/build/libs/typejava-examples-<version>.jar` — examples module
 
-The CLI jar is built by the `cliJar` task and attached to `assemble`, so `gradle build` includes it.
-Never make the normal `jar` fat: its POM declares ASM as a normal dependency.
+The CLI fat jar is built by the `:cli:cliJar` task and attached to `:cli:assemble`, so root
+`gradle build` includes it. Never make the `:lib` jar fat: its POM declares ASM as a normal
+dependency.
+
+The published Maven coordinates stay `cc.kilonode:typejava:<version>` even though the module
+directory is `lib`. Do not publish under `cc.kilonode:lib`.
 
 Version resolution:
 
@@ -58,19 +91,20 @@ Tag format: `typejava-vX.Y.Z` (full SemVer; prerelease suffixes are allowed, e.g
 `typejava-v0.2.0-rc.1`).
 
 ```bash
-git tag typejava-v0.1.0
-git push origin typejava-v0.1.0
+git tag typejava-v0.2.0
+git push origin typejava-v0.2.0
 ```
 
 `.github/workflows/release.yml`:
 
 1. Validates the tag against `typejava-vX.Y.Z`.
 2. Requires the tagged commit to be on `main`.
-3. Runs `gradle build publish -Pversion=<version>`.
-4. Publishes `cc.kilonode:typejava:<version>` to GitHub Packages.
+3. Runs `gradle build :lib:publish -Pversion=<version>`.
+4. Publishes only `cc.kilonode:typejava:<version>` to GitHub Packages.
 5. Creates a GitHub Release with the thin/sources/javadoc/CLI jars plus `SHA256SUMS`.
 
 Prerelease versions create prerelease GitHub Releases. Do not move or reuse a published tag.
+Never run bare root `publish`; publish `:lib:publish` explicitly.
 
 GitHub Packages requires authentication even for public Maven packages, using a classic PAT with
 `read:packages`. Maven Central is the intended future path for credential-free consumption.
@@ -80,12 +114,14 @@ present and the version is not a `-SNAPSHOT`. This prevents accidental snapshot 
 
 ## Architecture
 
-- `lexer/`, `parser/`, `ast/` — front end
-- `checker/` — nominal type checking, null narrowing, resolved symbols/types
-- `codegen/` — ASM generation; object types get an abstract base class per nominal type and a
-  subclass per method-bearing object-literal site
-- `runtime/` — `Console`, `TjArray`, `TjMap`, and value formatting
-- `TypeJava` — public `run` API and CLI entry point
+- `:lib` `lexer/`, `parser/`, `ast/` — front end
+- `:lib` `checker/` — nominal type checking, null narrowing, resolved symbols/types
+- `:lib` `codegen/` — ASM generation; object types get an abstract base class per nominal type and
+  a subclass per method-bearing object-literal site
+- `:lib` `runtime/` — `Console`, `TjArray`, `TjMap`, and value formatting
+- `:lib` `TypeJava` — public `run`/`runFile` API and generated classloader
+- `:cli` `Main` — argument parsing, file execution, usage, and exit codes
+- `:examples` `Main` — loads `.tj` resources and demonstrates only the public `TypeJava` API
 
 ## Constraints
 
@@ -97,5 +133,6 @@ present and the version is not a `-SNAPSHOT`. This prevents accidental snapshot 
   array/map literals, optional properties, `undefined`, general unions, type switches, or generic
   functions/methods.
 - Compilation is fail-fast; no error recovery or warnings.
+- Examples must not depend on test fixtures or compiler internals.
 - Do not add source comments unless requested.
 - Do not commit unless the user explicitly asks.

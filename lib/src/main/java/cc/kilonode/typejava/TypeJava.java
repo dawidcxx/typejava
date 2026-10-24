@@ -1,11 +1,9 @@
 package cc.kilonode.typejava;
 
-import cc.kilonode.typejava.checker.CheckException;
 import cc.kilonode.typejava.checker.CheckedProgram;
 import cc.kilonode.typejava.checker.Checker;
 import cc.kilonode.typejava.codegen.CodeGenerator;
 import cc.kilonode.typejava.lexer.Lexer;
-import cc.kilonode.typejava.parser.ParseException;
 import cc.kilonode.typejava.parser.ParseResult;
 import cc.kilonode.typejava.parser.Parser;
 import cc.kilonode.typejava.runtime.Console;
@@ -79,24 +77,6 @@ public final class TypeJava {
   /** Reads and runs a TypeJava source file. */
   public static void runFile(Path path, PrintStream out, String... args) throws IOException {
     run(Files.readString(path), out, args);
-  }
-
-  /** Command-line entry point: {@code java ... TypeJava path/to/script.tj}. */
-  public static void main(String[] args) {
-    if (args.length != 1) {
-      System.err.println("Usage: typejava <script.tj>");
-      System.exit(2);
-    }
-
-    try {
-      runFile(Path.of(args[0]), System.out);
-    } catch (ParseException | CheckException | IOException exception) {
-      System.err.println("error: " + exception.getMessage());
-      System.exit(1);
-    } catch (cc.kilonode.typejava.lexer.LexerException exception) {
-      System.err.println("error: " + exception.getMessage());
-      System.exit(1);
-    }
   }
 
   private static final class GeneratedClassLoader extends ClassLoader {

@@ -1,0 +1,25 @@
+type User = {
+  readonly name: string;
+  readonly score: number | null;
+};
+
+type Scoreboard = {
+  summarize: (this: Scoreboard, user: User) => string;
+};
+
+function describeScore(score: number | null): string {
+  if (score == null) {
+    return "unranked";
+  }
+
+  return "score " + score;
+};
+
+const board: Scoreboard = {
+  summarize(this: Scoreboard, user: User): string {
+    return user.name + ": " + describeScore(user.score);
+  }
+};
+
+console.log(board.summarize({ name: "Ada", score: 9 }));
+console.log(board.summarize({ name: "Grace", score: null }));

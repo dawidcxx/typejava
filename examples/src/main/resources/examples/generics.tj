@@ -1,0 +1,10 @@
+type Box<T> = {
+  value: T;
+};
+
+function describe(label: string, box: Box<number>): string {
+  return label + " = " + box.value;
+};
+
+const answer: Box<number> = { value: 42 };
+console.log(describe("answer", answer));

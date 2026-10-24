@@ -52,19 +52,27 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/daemon
             ~/.gradle/native
-          key: gradle-${{ runner.os }}-${{ hashFiles('build.gradle.kts', 'settings.gradle.kts', 'gradle.properties', 'gradle/libs.versions.toml') }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/build.gradle.kts', 'settings.gradle.kts', 'gradle.properties', 'gradle/libs.versions.toml') }}
           restore-keys: |
             gradle-${{ runner.os }}-
 
       - name: Build and publish package
         run: >-
-          nix develop --command gradle --no-daemon build publish
+          nix develop --command gradle --no-daemon build :lib:publish
           -Pversion="$VERSION"
 
       - name: Create GitHub release
         shell: bash
         run: |
-          cd build/libs
+          mkdir -p build/release-assets
+          cp \
+            "lib/build/libs/typejava-$VERSION.jar" \
+            "lib/build/libs/typejava-$VERSION-sources.jar" \
+            "lib/build/libs/typejava-$VERSION-javadoc.jar" \
+            "cli/build/libs/typejava-$VERSION-all.jar" \
+            build/release-assets/
+          cd build/release-assets
+
           sha256sum \
             "typejava-$VERSION.jar" \
             "typejava-$VERSION-sources.jar" \
