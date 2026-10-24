@@ -1,7 +1,7 @@
 type Person = {
   name: string;
   age: number;
-  greet(this: Person): string;
+  greet: (this: Person) => string;
 };
 
 const alice: Person = {

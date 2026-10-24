@@ -11,11 +11,11 @@ import cc.kilonode.typejava.ast.Expression;
 import cc.kilonode.typejava.ast.ExpressionStatement;
 import cc.kilonode.typejava.ast.FunctionDeclaration;
 import cc.kilonode.typejava.ast.FunctionExpression;
+import cc.kilonode.typejava.ast.FunctionType;
 import cc.kilonode.typejava.ast.Identifier;
 import cc.kilonode.typejava.ast.IfStatement;
 import cc.kilonode.typejava.ast.LValue;
 import cc.kilonode.typejava.ast.MemberExpression;
-import cc.kilonode.typejava.ast.MethodSignature;
 import cc.kilonode.typejava.ast.NamedType;
 import cc.kilonode.typejava.ast.NullLiteral;
 import cc.kilonode.typejava.ast.NullType;
@@ -32,7 +32,6 @@ import cc.kilonode.typejava.ast.Statement;
 import cc.kilonode.typejava.ast.StringLiteral;
 import cc.kilonode.typejava.ast.TypeAliasDeclaration;
 import cc.kilonode.typejava.ast.TypeField;
-import cc.kilonode.typejava.ast.TypeMember;
 import cc.kilonode.typejava.ast.TypeReference;
 import cc.kilonode.typejava.ast.UnaryExpression;
 import cc.kilonode.typejava.ast.UnionType;
@@ -257,6 +256,20 @@ public final class Parser {
   }
 
   private TypeReference typeAtom() {
+    if (check(TokenType.LPAREN) && isFunctionTypeStart()) {
+      Token start = advance();
+      List<Parameter> parameters = parameters();
+      consume(TokenType.RPAREN, "Expected ')' after function type parameters");
+      consume(TokenType.ARROW, "Expected '=>' after function type parameters");
+      TypeReference returnType = type();
+      return located(new FunctionType(parameters, returnType), start);
+    }
+    if (check(TokenType.LPAREN)) {
+      Token start = advance();
+      TypeReference type = type();
+      consume(TokenType.RPAREN, "Expected ')' after type");
+      return located(type, start, previous());
+    }
     if (check(TokenType.IDENTIFIER)) {
       Token start = advance();
       return located(new NamedType(start.lexeme(), typeArguments()), start);
@@ -270,6 +283,13 @@ public final class Parser {
       return located(objectType(), start);
     }
     throw error(peek(), "Expected a type name, object type, or null");
+  }
+
+  private boolean isFunctionTypeStart() {
+    if (peek(1).type() == TokenType.RPAREN) {
+      return true;
+    }
+    return peek(1).type() == TokenType.IDENTIFIER && peek(2).type() == TokenType.COLON;
   }
 
   private List<TypeReference> typeArguments() {
@@ -291,35 +311,26 @@ public final class Parser {
   }
 
   private ObjectType objectType() {
-    List<TypeMember> members = new ArrayList<>();
+    List<TypeField> members = new ArrayList<>();
 
     while (!check(TokenType.RBRACE) && !check(TokenType.EOF)) {
       Token start = peek();
       boolean readonly = match(TokenType.READONLY);
-      Token name = consume(TokenType.IDENTIFIER, "Expected field name or method name");
-
+      Token name = consume(TokenType.IDENTIFIER, "Expected field name");
       if (check(TokenType.LPAREN)) {
-        if (readonly) {
-          throw error(name, "Methods cannot be readonly");
-        }
-        consume(TokenType.LPAREN, "Expected '(' after method name");
-        List<Parameter> parameters = parameters();
-        consume(TokenType.RPAREN, "Expected ')' after method parameters");
-        consume(TokenType.COLON, "Expected ':' and a return type after method parameters");
-        TypeReference returnType = type();
-        consume(TokenType.SEMICOLON, "Expected ';' after method signature");
-        members.add(
-            located(new MethodSignature(name.lexeme(), parameters, returnType), start));
-      } else {
-        consume(
-            TokenType.COLON,
-            "Expected ':' and a type for field '" + name.lexeme() + "'");
-        TypeReference type = type();
-        consume(
-            TokenType.SEMICOLON,
-            "Expected ';' after field '" + name.lexeme() + "'");
-        members.add(located(new TypeField(name.lexeme(), readonly, type), start));
+        throw error(
+            peek(),
+            "Method signatures are not supported in object types;"
+                + " use 'name: (params) => returnType'");
       }
+      consume(
+          TokenType.COLON,
+          "Expected ':' and a type for field '" + name.lexeme() + "'");
+      TypeReference type = type();
+      consume(
+          TokenType.SEMICOLON,
+          "Expected ';' after field '" + name.lexeme() + "'");
+      members.add(located(new TypeField(name.lexeme(), readonly, type), start));
     }
 
     consume(TokenType.RBRACE, "Expected '}' after object type");
@@ -644,7 +655,12 @@ public final class Parser {
   }
 
   private Token peek() {
-    return tokens.get(current);
+    return peek(0);
+  }
+
+  private Token peek(int offset) {
+    int index = Math.min(current + offset, tokens.size() - 1);
+    return tokens.get(index);
   }
 
   private Token previous() {

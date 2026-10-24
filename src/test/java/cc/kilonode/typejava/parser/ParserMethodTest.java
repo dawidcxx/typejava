@@ -8,31 +8,62 @@ import cc.kilonode.typejava.ast.BinaryExpression;
 import cc.kilonode.typejava.ast.CallExpression;
 import cc.kilonode.typejava.ast.ExpressionStatement;
 import cc.kilonode.typejava.ast.FunctionExpression;
+import cc.kilonode.typejava.ast.FunctionType;
 import cc.kilonode.typejava.ast.Identifier;
 import cc.kilonode.typejava.ast.MemberExpression;
-import cc.kilonode.typejava.ast.MethodSignature;
 import cc.kilonode.typejava.ast.NamedType;
+import cc.kilonode.typejava.ast.NullType;
 import cc.kilonode.typejava.ast.ObjectLiteral;
 import cc.kilonode.typejava.ast.ObjectType;
 import cc.kilonode.typejava.ast.Parameter;
 import cc.kilonode.typejava.ast.Program;
 import cc.kilonode.typejava.ast.ReturnStatement;
 import cc.kilonode.typejava.ast.StringLiteral;
+import cc.kilonode.typejava.ast.TypeField;
+import cc.kilonode.typejava.ast.UnionType;
 import cc.kilonode.typejava.ast.VariableDeclaration;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ParserMethodTest {
   @Test
-  void parsesMethodSignatureInObjectType() {
-    Program program = parse("type Person = { name: string; greet(this: Person): string; };");
+  void parsesFunctionTypeFieldInObjectType() {
+    Program program =
+        parse("type Person = { name: string; greet: (this: Person) => string; };");
 
     ObjectType person = (ObjectType) program.typeDeclarations().get(0).type();
-    MethodSignature greet = (MethodSignature) person.members().get(1);
+    TypeField greet = person.members().get(1);
     assertEquals("greet", greet.name());
     assertEquals(
-        List.of(new Parameter("this", new NamedType("Person"))), greet.parameters());
-    assertEquals(new NamedType("string"), greet.returnType());
+        new FunctionType(
+            List.of(new Parameter("this", new NamedType("Person"))),
+            new NamedType("string")),
+        greet.type());
+  }
+
+  @Test
+  void parsesEmptyFunctionType() {
+    Program program = parse("let callback: () => void = null;");
+
+    VariableDeclaration callback = (VariableDeclaration) program.statements().get(0);
+    assertEquals(
+        new FunctionType(List.of(), new NamedType("void")), callback.type());
+  }
+
+  @Test
+  void parsesNullableFunctionType() {
+    Program program =
+        parse("type Handler = { callback: ((value: number) => string) | null; };");
+
+    ObjectType handler = (ObjectType) program.typeDeclarations().get(0).type();
+    assertEquals(
+        new UnionType(
+            List.of(
+                new FunctionType(
+                    List.of(new Parameter("value", new NamedType("number"))),
+                    new NamedType("string")),
+                new NullType())),
+        handler.members().get(0).type());
   }
 
   @Test

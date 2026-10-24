@@ -9,12 +9,25 @@ import org.junit.jupiter.api.Test;
 
 class ParserMethodErrorTest {
   @Test
-  void reportsMissingMethodReturnType() {
+  void rejectsMethodSignatureInObjectType() {
     ParseException error =
-        assertThrows(ParseException.class, () -> parse("type X = { f(this: X): ; };"));
+        assertThrows(
+            ParseException.class,
+            () -> parse("type X = { f(this: X): void; };"));
 
     assertEquals(1, error.getLine());
-    assertTrue(error.getMessage().contains("type name"));
+    assertTrue(error.getMessage().contains("Method signatures are not supported"));
+  }
+
+  @Test
+  void reportsMissingFunctionTypeArrow() {
+    ParseException error =
+        assertThrows(
+            ParseException.class,
+            () -> parse("type X = { f: (x: number) string; };"));
+
+    assertEquals(1, error.getLine());
+    assertTrue(error.getMessage().contains("Expected '=>'"));
   }
 
   @Test
@@ -25,14 +38,5 @@ class ParserMethodErrorTest {
 
     assertEquals(1, error.getLine());
     assertTrue(error.getMessage().contains("Expected '{'"));
-  }
-
-  @Test
-  void rejectsReadonlyMethod() {
-    ParseException error =
-        assertThrows(ParseException.class, () -> parse("type X = { readonly f(): void; };"));
-
-    assertEquals(1, error.getLine());
-    assertTrue(error.getMessage().contains("Methods cannot be readonly"));
   }
 }

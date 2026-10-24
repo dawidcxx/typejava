@@ -51,8 +51,8 @@ type Box<T> = {
 };
 
 type Classifier = {
-  classify(this: Classifier, log: UpstreamLog): LogClassification;
-  explain(this: Classifier, classification: LogClassification): string;
+  classify: (this: Classifier, log: UpstreamLog) => LogClassification;
+  explain: (this: Classifier, classification: LogClassification) => string;
 };
 
 function severityOf(level: number | null): string {

@@ -31,6 +31,7 @@ public enum TokenType {
   SLASH,
   PERCENT,
   ASSIGN,
+  ARROW,
   EQEQ,
   BANGEQ,
   LT,

@@ -22,6 +22,23 @@ class LexerOperatorTest {
   }
 
   @Test
+  void tokenizesFunctionArrow() {
+    List<Token> tokens = new Lexer("(this: Person) => string").tokenize();
+
+    assertEquals(
+        List.of(
+            TokenType.LPAREN,
+            TokenType.IDENTIFIER,
+            TokenType.COLON,
+            TokenType.IDENTIFIER,
+            TokenType.RPAREN,
+            TokenType.ARROW,
+            TokenType.IDENTIFIER,
+            TokenType.EOF),
+        tokens.stream().map(Token::type).toList());
+  }
+
+  @Test
   void tokenizesAssignmentAndEqualityOperators() {
     List<Token> tokens = new Lexer("= == != < <= > >=").tokenize();
 

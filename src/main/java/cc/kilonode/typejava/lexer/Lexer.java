@@ -100,7 +100,14 @@ public final class Lexer {
         }
         case '=' -> {
           advance();
-          TokenType type = match('=') ? TokenType.EQEQ : TokenType.ASSIGN;
+          TokenType type;
+          if (match('=')) {
+            type = TokenType.EQEQ;
+          } else if (match('>')) {
+            type = TokenType.ARROW;
+          } else {
+            type = TokenType.ASSIGN;
+          }
           tokens.add(new Token(type, source.substring(start, index), null, tokenLine, tokenColumn));
         }
         case '!' -> {
