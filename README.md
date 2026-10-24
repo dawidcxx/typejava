@@ -1,3 +1,8 @@
+
+> ⚠️ **Work in progress.** The language, standard library, and this README are subject to change. Nothing really works yet and may never be finished.
+
+> ⚠️ **AI slop.** But still probably better than other solutions out there
+
 # TypeJava
 
 TypeScript-flavoured scripting on the JVM, compiled to bytecode with ASM.
