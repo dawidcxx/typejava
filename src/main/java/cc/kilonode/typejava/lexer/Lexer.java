@@ -43,6 +43,9 @@ public final class Lexer {
               case "readonly" -> TokenType.READONLY;
               case "if" -> TokenType.IF;
               case "else" -> TokenType.ELSE;
+              case "while" -> TokenType.WHILE;
+              case "break" -> TokenType.BREAK;
+              case "continue" -> TokenType.CONTINUE;
               case "true" -> TokenType.TRUE;
               case "false" -> TokenType.FALSE;
               default -> TokenType.IDENTIFIER;
@@ -240,12 +243,44 @@ public final class Lexer {
   private void skipWhitespace() {
     while (!isAtEnd()) {
       char c = peek();
+
       if (c == ' ' || c == '\t' || c == '\f' || c == '\n' || c == '\r') {
         advance();
+      } else if (c == '/' && peekNext() == '/') {
+        skipLineComment();
+      } else if (c == '/' && peekNext() == '*') {
+        skipBlockComment();
       } else {
         break;
       }
     }
+  }
+
+  private void skipLineComment() {
+    advance();
+    advance();
+
+    while (!isAtEnd() && peek() != '\n' && peek() != '\r') {
+      advance();
+    }
+  }
+
+  private void skipBlockComment() {
+    int startLine = line;
+    int startColumn = column;
+    advance();
+    advance();
+
+    while (!isAtEnd()) {
+      if (peek() == '*' && peekNext() == '/') {
+        advance();
+        advance();
+        return;
+      }
+      advance();
+    }
+
+    throw new LexerException("Unterminated block comment", startLine, startColumn);
   }
 
   private char advance() {

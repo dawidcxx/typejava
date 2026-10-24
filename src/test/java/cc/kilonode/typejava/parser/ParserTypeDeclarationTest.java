@@ -49,8 +49,8 @@ class ParserTypeDeclarationTest {
     Program program = parse(read("host-entity.tj"));
 
     ObjectType objectType = (ObjectType) program.typeDeclarations().get(0).type();
-    TypeField a = objectType.fields().get(0);
-    TypeField nested = objectType.fields().get(1);
+    TypeField a = (TypeField) objectType.members().get(0);
+    TypeField nested = (TypeField) objectType.members().get(1);
     assertEquals(new TypeField("a", true, new NamedType("number")), a);
     assertEquals("nested", nested.name());
     assertEquals(true, nested.readonly());

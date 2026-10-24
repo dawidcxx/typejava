@@ -1,0 +1,11 @@
+function countdown(start: number): number {
+  let current: number = start;
+
+  while (current > 0) {
+    current = current - 1;
+  }
+
+  return current;
+};
+
+console.log(countdown(3));

@@ -2,8 +2,8 @@ package cc.kilonode.typejava.ast;
 
 import java.util.List;
 
-public record ObjectType(List<TypeField> fields) implements TypeReference {
+public record ObjectType(List<TypeMember> members) implements TypeReference {
   public ObjectType {
-    fields = List.copyOf(fields);
+    members = List.copyOf(members);
   }
 }

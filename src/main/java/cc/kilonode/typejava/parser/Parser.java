@@ -4,14 +4,18 @@ import cc.kilonode.typejava.ast.AssignmentExpression;
 import cc.kilonode.typejava.ast.BinaryExpression;
 import cc.kilonode.typejava.ast.BlockStatement;
 import cc.kilonode.typejava.ast.BooleanLiteral;
+import cc.kilonode.typejava.ast.BreakStatement;
 import cc.kilonode.typejava.ast.CallExpression;
+import cc.kilonode.typejava.ast.ContinueStatement;
 import cc.kilonode.typejava.ast.Expression;
 import cc.kilonode.typejava.ast.ExpressionStatement;
 import cc.kilonode.typejava.ast.FunctionDeclaration;
+import cc.kilonode.typejava.ast.FunctionExpression;
 import cc.kilonode.typejava.ast.Identifier;
 import cc.kilonode.typejava.ast.IfStatement;
 import cc.kilonode.typejava.ast.LValue;
 import cc.kilonode.typejava.ast.MemberExpression;
+import cc.kilonode.typejava.ast.MethodSignature;
 import cc.kilonode.typejava.ast.NamedType;
 import cc.kilonode.typejava.ast.NumericLiteral;
 import cc.kilonode.typejava.ast.ObjectField;
@@ -26,10 +30,12 @@ import cc.kilonode.typejava.ast.Statement;
 import cc.kilonode.typejava.ast.StringLiteral;
 import cc.kilonode.typejava.ast.TypeAliasDeclaration;
 import cc.kilonode.typejava.ast.TypeField;
+import cc.kilonode.typejava.ast.TypeMember;
 import cc.kilonode.typejava.ast.TypeReference;
 import cc.kilonode.typejava.ast.UnaryExpression;
 import cc.kilonode.typejava.ast.VariableDeclaration;
 import cc.kilonode.typejava.ast.VariableKind;
+import cc.kilonode.typejava.ast.WhileStatement;
 import cc.kilonode.typejava.lexer.Token;
 import cc.kilonode.typejava.lexer.TokenType;
 import java.util.ArrayList;
@@ -91,6 +97,15 @@ public final class Parser {
     }
     if (check(TokenType.IF)) {
       return ifStatement();
+    }
+    if (check(TokenType.WHILE)) {
+      return whileStatement();
+    }
+    if (check(TokenType.BREAK)) {
+      return breakStatement();
+    }
+    if (check(TokenType.CONTINUE)) {
+      return continueStatement();
     }
     if (check(TokenType.LBRACE)) {
       return block();
@@ -157,6 +172,30 @@ public final class Parser {
     return located(new IfStatement(condition, thenBranch, elseBranch), start);
   }
 
+  private WhileStatement whileStatement() {
+    Token start = peek();
+    consume(TokenType.WHILE, "Expected 'while'");
+    consume(TokenType.LPAREN, "Expected '(' after 'while'");
+    Expression condition = expression();
+    consume(TokenType.RPAREN, "Expected ')' after while condition");
+    BlockStatement body = block();
+    return located(new WhileStatement(condition, body), start);
+  }
+
+  private BreakStatement breakStatement() {
+    Token start = peek();
+    consume(TokenType.BREAK, "Expected 'break'");
+    consume(TokenType.SEMICOLON, "Expected ';' after break");
+    return located(new BreakStatement(), start);
+  }
+
+  private ContinueStatement continueStatement() {
+    Token start = peek();
+    consume(TokenType.CONTINUE, "Expected 'continue'");
+    consume(TokenType.SEMICOLON, "Expected ';' after continue");
+    return located(new ContinueStatement(), start);
+  }
+
   private List<Parameter> parameters() {
     List<Parameter> parameters = new ArrayList<>();
 
@@ -191,23 +230,39 @@ public final class Parser {
   }
 
   private ObjectType objectType() {
-    List<TypeField> fields = new ArrayList<>();
+    List<TypeMember> members = new ArrayList<>();
 
     while (!check(TokenType.RBRACE) && !check(TokenType.EOF)) {
+      Token start = peek();
       boolean readonly = match(TokenType.READONLY);
-      Token name = consume(TokenType.IDENTIFIER, "Expected field name");
-      consume(
-          TokenType.COLON,
-          "Expected ':' and a type for field '" + name.lexeme() + "'");
-      TypeReference type = type();
-      consume(
-          TokenType.SEMICOLON,
-          "Expected ';' after field '" + name.lexeme() + "'");
-      fields.add(located(new TypeField(name.lexeme(), readonly, type), name));
+      Token name = consume(TokenType.IDENTIFIER, "Expected field name or method name");
+
+      if (check(TokenType.LPAREN)) {
+        if (readonly) {
+          throw error(name, "Methods cannot be readonly");
+        }
+        consume(TokenType.LPAREN, "Expected '(' after method name");
+        List<Parameter> parameters = parameters();
+        consume(TokenType.RPAREN, "Expected ')' after method parameters");
+        consume(TokenType.COLON, "Expected ':' and a return type after method parameters");
+        TypeReference returnType = type();
+        consume(TokenType.SEMICOLON, "Expected ';' after method signature");
+        members.add(
+            located(new MethodSignature(name.lexeme(), parameters, returnType), start));
+      } else {
+        consume(
+            TokenType.COLON,
+            "Expected ':' and a type for field '" + name.lexeme() + "'");
+        TypeReference type = type();
+        consume(
+            TokenType.SEMICOLON,
+            "Expected ';' after field '" + name.lexeme() + "'");
+        members.add(located(new TypeField(name.lexeme(), readonly, type), start));
+      }
     }
 
     consume(TokenType.RBRACE, "Expected '}' after object type");
-    return new ObjectType(fields);
+    return new ObjectType(members);
   }
 
   private BlockStatement block() {
@@ -226,8 +281,10 @@ public final class Parser {
   private ReturnStatement returnStatement() {
     Token start = peek();
     consume(TokenType.RETURN, "Expected 'return'");
-    Expression value = expression();
-    consume(TokenType.SEMICOLON, "Expected ';' after return value (maybe you forgot a semicolon)");
+    boolean bare =
+        check(TokenType.SEMICOLON) || check(TokenType.RBRACE) || check(TokenType.EOF);
+    Expression value = bare ? null : expression();
+    consume(TokenType.SEMICOLON, "Expected ';' after return (maybe you forgot a semicolon)");
     return located(new ReturnStatement(value), start);
   }
 
@@ -428,10 +485,16 @@ public final class Parser {
 
     while (!check(TokenType.RBRACE) && !check(TokenType.EOF)) {
       Token name = consume(TokenType.IDENTIFIER, "Expected field name in object literal");
-      consume(
-          TokenType.COLON,
-          "Expected ':' after object field name '" + name.lexeme() + "'");
-      fields.add(located(new ObjectField(name.lexeme(), expression()), name));
+
+      if (check(TokenType.LPAREN)) {
+        FunctionExpression method = objectMethod(name);
+        fields.add(located(new ObjectField(name.lexeme(), method), name));
+      } else {
+        consume(
+            TokenType.COLON,
+            "Expected ':' after object field name '" + name.lexeme() + "'");
+        fields.add(located(new ObjectField(name.lexeme(), expression()), name));
+      }
 
       if (!match(TokenType.COMMA)) {
         break;
@@ -440,6 +503,16 @@ public final class Parser {
 
     consume(TokenType.RBRACE, "Expected '}' after object literal");
     return new ObjectLiteral(fields);
+  }
+
+  private FunctionExpression objectMethod(Token start) {
+    consume(TokenType.LPAREN, "Expected '(' after method name");
+    List<Parameter> parameters = parameters();
+    consume(TokenType.RPAREN, "Expected ')' after method parameters");
+    consume(TokenType.COLON, "Expected ':' and a return type after method parameters");
+    TypeReference returnType = type();
+    BlockStatement body = block();
+    return located(new FunctionExpression(parameters, returnType, body), start);
   }
 
   private <T> T located(T node, Token start) {

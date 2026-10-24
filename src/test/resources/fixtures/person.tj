@@ -1,0 +1,15 @@
+type Person = {
+  name: string;
+  age: number;
+  greet(this: Person): string;
+};
+
+const alice: Person = {
+  name: "Alice",
+  age: 30,
+  greet(this: Person): string {
+    return "Hi, I'm " + this.name;
+  }
+};
+
+console.log(alice.greet());

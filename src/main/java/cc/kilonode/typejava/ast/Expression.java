@@ -5,6 +5,7 @@ public sealed interface Expression
         BinaryExpression,
         BooleanLiteral,
         CallExpression,
+        FunctionExpression,
         Identifier,
         MemberExpression,
         NumericLiteral,

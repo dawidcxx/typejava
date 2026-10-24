@@ -1,0 +1,9 @@
+// A line comment
+/* A block
+   comment */
+function noop(): void {
+  // nothing here
+  return;
+};
+
+console.log("done"); // trailing

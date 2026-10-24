@@ -1,0 +1,20 @@
+function countdown(start: number): number {
+  let current: number = start;
+
+  while (current > 0) {
+    if (current == 3) {
+      current = current - 1;
+      continue;
+    }
+
+    if (current == 1) {
+      break;
+    }
+
+    current = current - 1;
+  }
+
+  return current;
+};
+
+console.log(countdown(3));

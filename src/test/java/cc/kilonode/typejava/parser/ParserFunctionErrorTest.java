@@ -36,12 +36,12 @@ class ParserFunctionErrorTest {
   }
 
   @Test
-  void reportsMissingReturnExpression() {
+  void reportsMissingSemicolonAfterBareReturn() {
     ParseException error =
-        assertThrows(ParseException.class, () -> parse("function ping(): number { return; };"));
+        assertThrows(ParseException.class, () -> parse("function ping(): number { return };"));
 
     assertEquals(1, error.getLine());
-    assertTrue(error.getMessage().contains("Expected expression"));
+    assertTrue(error.getMessage().contains("semicolon"));
   }
 
   @Test
