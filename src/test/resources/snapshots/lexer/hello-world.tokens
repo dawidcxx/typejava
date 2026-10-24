@@ -1,0 +1,8 @@
+IDENTIFIER   "console"                @ 1:1
+DOT          "."                      @ 1:8
+IDENTIFIER   "log"                    @ 1:9
+LPAREN       "("                      @ 1:12
+STRING       "\"hello world\""        @ 1:13 value="hello world"
+RPAREN       ")"                      @ 1:26
+SEMICOLON    ";"                      @ 1:27
+EOF          ""                       @ 2:1

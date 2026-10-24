@@ -1,6 +1,7 @@
 package cc.kilonode.typejava.parser;
 
 import static cc.kilonode.typejava.parser.ParserTestSupport.parse;
+import static cc.kilonode.typejava.testing.TestFixtures.read;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import cc.kilonode.typejava.ast.BinaryExpression;
@@ -21,15 +22,7 @@ import org.junit.jupiter.api.Test;
 class ParserProgramTest {
   @Test
   void parsesTypedFunctionAndCall() {
-    Program program =
-        parse(
-            """
-            function add(a: number, b: number): number {
-              return a + b;
-            };
-
-            console.log(add(2, 2));
-            """);
+    Program program = parse(read("basic-function.tj"));
 
     Program expected =
         new Program(
@@ -37,9 +30,9 @@ class ParserProgramTest {
                 new FunctionDeclaration(
                     "add",
                     List.of(
-                        new Parameter("a", new TypeReference("number")),
-                        new Parameter("b", new TypeReference("number"))),
-                    new TypeReference("number"),
+                        new Parameter("a", new TypeReference("std.Int")),
+                        new Parameter("b", new TypeReference("std.Int"))),
+                    new TypeReference("std.Int"),
                     new BlockStatement(
                         List.of(
                             new ReturnStatement(
