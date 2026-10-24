@@ -244,13 +244,16 @@ public final class Parser {
       return first;
     }
 
-    List<TypeReference> members = new ArrayList<>();
-    members.add(first);
-    do {
-      members.add(typeAtom());
-    } while (match(TokenType.PIPE));
+    Token secondStart = peek();
+    TypeReference second = typeAtom();
+    if (!(first instanceof NullType) && !(second instanceof NullType)) {
+      throw error(secondStart, "Only nullable unions are allowed; use 'T | null'");
+    }
+    if (check(TokenType.PIPE)) {
+      throw error(peek(), "A union may contain only one 'null' member");
+    }
 
-    return located(new UnionType(members), start);
+    return located(new UnionType(List.of(first, second)), start);
   }
 
   private TypeReference typeAtom() {

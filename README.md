@@ -20,8 +20,9 @@ declarations and applications; the checker, code generator, and runtime are stil
 Generics are deliberately small: type parameters on type declarations and explicit type arguments
 on named types. There are no user-declared generic functions or methods yet.
 
-`T | null` is the absence representation. There is no `undefined` and no optional-property syntax;
-normalize incoming optionals and nullables at the boundary.
+`T | null` is the absence representation. There is no `undefined`, no optional-property syntax, and
+no general unions: the only union form is a nullable pair with `null`. Normalize incoming optionals
+and nullables at the boundary.
 
 ## Example
 

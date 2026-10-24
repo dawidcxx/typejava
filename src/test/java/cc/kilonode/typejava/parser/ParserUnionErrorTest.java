@@ -26,4 +26,23 @@ class ParserUnionErrorTest {
     assertEquals(1, error.getLine());
     assertTrue(error.getMessage().contains("type name"));
   }
+
+  @Test
+  void rejectsGeneralUnion() {
+    ParseException error =
+        assertThrows(ParseException.class, () -> parse("type Broken = number | string;"));
+
+    assertEquals(1, error.getLine());
+    assertTrue(error.getMessage().contains("nullable"));
+  }
+
+  @Test
+  void rejectsUnionWithMoreThanOneMember() {
+    ParseException error =
+        assertThrows(
+            ParseException.class, () -> parse("type Broken = number | null | string;"));
+
+    assertEquals(1, error.getLine());
+    assertTrue(error.getMessage().contains("only one 'null' member"));
+  }
 }

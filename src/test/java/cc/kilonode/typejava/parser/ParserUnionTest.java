@@ -32,6 +32,17 @@ class ParserUnionTest {
   }
 
   @Test
+  void parsesLeadingNullUnion() {
+    Program program = parse("type MaybeNumber = null | number;");
+
+    assertEquals(
+        new TypeAliasDeclaration(
+            "MaybeNumber",
+            new UnionType(List.of(new NullType(), new NamedType("number")))),
+        program.typeDeclarations().get(0));
+  }
+
+  @Test
   void parsesUnionWithObjectType() {
     Program program = parse("type Shape = { radius: number; } | null;");
 
