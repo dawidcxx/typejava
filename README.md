@@ -1,5 +1,5 @@
 
-> ⚠️ **Work in progress.** The language, standard library, and this README are subject to change. Nothing really works yet and may never be finished.
+> ⚠️ **Work in progress.** The language, standard library, and this README are subject to change. The supported subset runs, but expect gaps and breaking changes.
 
 > ⚠️ **AI slop.** But still probably better than other solutions out there
 
@@ -13,9 +13,10 @@ interest in shipping a browser runtime.
 
 ## Status
 
-Early development. The lexer and parser cover the example below, including generic type
-declarations and applications; the checker, code generator, and runtime are still being built.
-`TjArray`, `TjMap`, and the compatibility reference are WIP parts of the future standard library.
+Early development, but the example below now compiles and runs. The lexer, parser, checker, and ASM
+code generator cover the documented subset. The bundled runtime is intentionally small: `console`
+plus the `TjArray` and `TjMap` methods used here. The compatibility reference is still a WIP part of
+the future standard library.
 
 Generics are deliberately small: type parameters on type declarations and explicit type arguments
 on named types. There are no user-declared generic functions or methods yet.
@@ -23,6 +24,18 @@ on named types. There are no user-declared generic functions or methods yet.
 `T | null` is the absence representation. There is no `undefined`, no optional-property syntax, and
 no general unions: the only union form is a nullable pair with `null`. Normalize incoming optionals
 and nullables at the boundary.
+
+Compilation is fail-fast: the first lexical, syntax, or type error aborts the run. There is no error
+recovery and there are no warnings.
+
+The runnable subset currently includes top-level functions, typed variables (`let`/`const`),
+`if`/`else`, `while`, `break`, `continue`, object type aliases, object literals with methods,
+generic type aliases and applications, numeric/string/boolean values, `null`, nullable narrowing,
+and the bundled `console`, `TjArray`, and `TjMap` methods used above.
+
+Not supported yet: imports or modules, exceptions, inheritance, overloads, lambdas or first-class
+function values, array/map literals, optional properties, `undefined`, general unions, type switches,
+and generic functions or methods.
 
 ## Example
 
@@ -195,6 +208,24 @@ nix develop --command gradle check
 ```
 
 Build outputs land in `build/libs/`.
+
+## Running
+
+Build the jar, then point the entry point at a `.tj` file:
+
+```bash
+nix develop --command gradle jar
+java -jar build/libs/typejava-0.1.0-SNAPSHOT.jar example.tj
+```
+
+The same program can be run from Java:
+
+```java
+TypeJava.run(source, System.out);
+```
+
+`console.log` writes to the supplied stream. Any runtime exception from the generated program is
+allowed to escape unchanged.
 
 ## Artifacts
 

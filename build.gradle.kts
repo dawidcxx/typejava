@@ -40,7 +40,10 @@ tasks.withType<AbstractArchiveTask>().configureEach {
 tasks.jar {
     manifest {
         attributes["Automatic-Module-Name"] = "cc.kilonode.typejava"
+        attributes["Main-Class"] = "cc.kilonode.typejava.TypeJava"
     }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
 }
 
 publishing {
