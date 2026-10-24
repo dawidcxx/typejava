@@ -28,7 +28,7 @@ class LexerTest {
 
   @Test
   void tokenizesPunctuation() {
-    List<Token> tokens = new Lexer(".,();").tokenize();
+    List<Token> tokens = new Lexer(".,();:{}").tokenize();
 
     assertEquals(
         List.of(
@@ -37,6 +37,9 @@ class LexerTest {
             TokenType.LPAREN,
             TokenType.RPAREN,
             TokenType.SEMICOLON,
+            TokenType.COLON,
+            TokenType.LBRACE,
+            TokenType.RBRACE,
             TokenType.EOF),
         tokens.stream().map(Token::type).toList());
   }

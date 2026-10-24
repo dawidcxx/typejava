@@ -32,7 +32,19 @@ public final class Lexer {
         while (isIdentifierPart(peek())) {
           advance();
         }
-        tokens.add(new Token(TokenType.IDENTIFIER, source.substring(start, index), null, tokenLine, tokenColumn));
+        String text = source.substring(start, index);
+        TokenType type =
+            switch (text) {
+              case "function" -> TokenType.FUNCTION;
+              case "return" -> TokenType.RETURN;
+              default -> TokenType.IDENTIFIER;
+            };
+        tokens.add(new Token(type, text, null, tokenLine, tokenColumn));
+        continue;
+      }
+
+      if (Character.isDigit(c)) {
+        tokens.add(scanNumber(tokenLine, tokenColumn));
         continue;
       }
 
@@ -41,6 +53,22 @@ public final class Lexer {
         case '.' -> {
           advance();
           tokens.add(new Token(TokenType.DOT, ".", null, tokenLine, tokenColumn));
+        }
+        case ':' -> {
+          advance();
+          tokens.add(new Token(TokenType.COLON, ":", null, tokenLine, tokenColumn));
+        }
+        case '{' -> {
+          advance();
+          tokens.add(new Token(TokenType.LBRACE, "{", null, tokenLine, tokenColumn));
+        }
+        case '}' -> {
+          advance();
+          tokens.add(new Token(TokenType.RBRACE, "}", null, tokenLine, tokenColumn));
+        }
+        case '+' -> {
+          advance();
+          tokens.add(new Token(TokenType.PLUS, "+", null, tokenLine, tokenColumn));
         }
         case '(' -> {
           advance();
@@ -118,6 +146,23 @@ public final class Lexer {
     throw new LexerException("Unterminated string literal", tokenLine, tokenColumn);
   }
 
+  private Token scanNumber(int tokenLine, int tokenColumn) {
+    int start = index;
+
+    while (Character.isDigit(peek())) {
+      advance();
+    }
+
+    if (peek() == '.' && Character.isDigit(peekNext())) {
+      advance();
+      while (Character.isDigit(peek())) {
+        advance();
+      }
+    }
+
+    return new Token(TokenType.NUMBER, source.substring(start, index), null, tokenLine, tokenColumn);
+  }
+
   private char scanUnicodeEscape() {
     int value = 0;
     for (int i = 0; i < 4; i++) {
@@ -170,6 +215,10 @@ public final class Lexer {
 
   private char peek() {
     return isAtEnd() ? '\0' : source.charAt(index);
+  }
+
+  private char peekNext() {
+    return index + 1 >= source.length() ? '\0' : source.charAt(index + 1);
   }
 
   private boolean isAtEnd() {

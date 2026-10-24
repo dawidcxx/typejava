@@ -1,3 +1,4 @@
 package cc.kilonode.typejava.ast;
 
-public sealed interface Expression permits Identifier, StringLiteral, MemberExpression, CallExpression {}
+public sealed interface Expression
+    permits BinaryExpression, CallExpression, Identifier, MemberExpression, NumericLiteral, StringLiteral {}
