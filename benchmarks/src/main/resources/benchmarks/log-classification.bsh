@@ -1,0 +1,182 @@
+import java.io.PrintStream;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+String severityOf(Integer level) {
+  if (level == null) {
+    return "unknown";
+  }
+
+  if (level.intValue() >= 5) {
+    return "critical";
+  }
+
+  if (level.intValue() >= 3) {
+    return "warning";
+  }
+
+  return "info";
+}
+
+double basePriority(String severity, String service) {
+  if (severity.equals("critical")) {
+    return 3;
+  }
+
+  if (severity.equals("warning")) {
+    if (service.equals("billing")) {
+      return 2;
+    }
+
+    return 1;
+  }
+
+  if (severity.equals("info")) {
+    return 0;
+  }
+
+  return -1;
+}
+
+String actionOf(String severity, double priority, String message) {
+  if (message.equals("card declined")) {
+    return "page";
+  }
+
+  if (severity.equals("critical")) {
+    return "page";
+  }
+
+  if (severity.equals("warning") && priority >= 2) {
+    return "page";
+  }
+
+  if (severity.equals("warning")) {
+    return "ticket";
+  }
+
+  if (severity.equals("info")) {
+    return "log";
+  }
+
+  return "ignore";
+}
+
+String serviceAt(int index) {
+  int slot = index % 5;
+
+  if (slot == 0) {
+    return "billing";
+  }
+
+  if (slot == 1) {
+    return "auth";
+  }
+
+  if (slot == 2) {
+    return "cron";
+  }
+
+  if (slot == 3) {
+    return "search";
+  }
+
+  return "checkout";
+}
+
+Integer levelAt(int index) {
+  int slot = index % 7;
+
+  if (slot == 0) {
+    return null;
+  }
+
+  if (slot == 6) {
+    return Integer.valueOf(5);
+  }
+
+  return Integer.valueOf(slot);
+}
+
+String messageAt(int index) {
+  int slot = index % 4;
+
+  if (slot == 0) {
+    return "timeout";
+  }
+
+  if (slot == 1) {
+    return "card declined";
+  }
+
+  if (slot == 2) {
+    return "login failed";
+  }
+
+  return "nothing to report";
+}
+
+Map classify(Map log) {
+  String severity = severityOf((Integer) log.get("level"));
+  double priority = basePriority(severity, (String) log.get("service"));
+  String action = actionOf(severity, priority, (String) log.get("message"));
+  Map result = new LinkedHashMap();
+  result.put("service", log.get("service"));
+  result.put("severity", severity);
+  result.put("action", action);
+  result.put("priority", Double.valueOf(priority));
+  return result;
+}
+
+void increment(Map counts, String key) {
+  Integer current = (Integer) counts.get(key);
+
+  if (current == null) {
+    counts.put(key, Integer.valueOf(1));
+  } else {
+    counts.put(key, Integer.valueOf(current.intValue() + 1));
+  }
+}
+
+String runWorkload(int count, PrintStream out) {
+  List logs = new ArrayList(count);
+
+  for (int i = 0; i < count; i++) {
+    Map log = new LinkedHashMap();
+    log.put("service", serviceAt(i));
+    log.put("message", messageAt(i));
+    log.put("level", levelAt(i));
+    logs.add(log);
+  }
+
+  Map severityCounts = new LinkedHashMap();
+  Map actionCounts = new LinkedHashMap();
+  int critical = 0;
+  int pageable = 0;
+
+  for (int i = 0; i < logs.size(); i++) {
+    Map result = classify((Map) logs.get(i));
+    String severity = (String) result.get("severity");
+    String action = (String) result.get("action");
+    increment(severityCounts, severity);
+    increment(actionCounts, action);
+
+    if (severity.equals("critical")) {
+      critical++;
+    }
+
+    if (action.equals("page")) {
+      pageable++;
+    }
+  }
+
+  Integer warnings = (Integer) severityCounts.get("warning");
+  int warningCount = warnings == null ? 0 : warnings.intValue();
+  String summary = "logs=" + logs.size() + " critical=" + critical + " warnings=" + warningCount
+      + " page=" + pageable + " severities=" + severityCounts.size()
+      + " actions=" + actionCounts.size();
+  out.println(summary);
+  return summary;
+}

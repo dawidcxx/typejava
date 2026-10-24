@@ -44,11 +44,11 @@ subprojects {
 }
 
 tasks.named("assemble") {
-    dependsOn(":lib:assemble", ":cli:assemble", ":examples:assemble")
+    dependsOn(":lib:assemble", ":cli:assemble", ":examples:assemble", ":benchmarks:assemble")
 }
 
 tasks.named("check") {
-    dependsOn(":lib:check", ":cli:check", ":examples:check")
+    dependsOn(":lib:check", ":cli:check", ":examples:check", ":benchmarks:check")
 }
 
 tasks.named("build") {

@@ -19,6 +19,32 @@ optional-property syntax. Generics are limited to type declarations and explicit
 Not supported yet: imports/modules, exceptions, inheritance, overloads, lambdas or first-class
 function values, array/map literals, general unions, type switches, and generic functions/methods.
 
+## Benchmarks
+
+Same log-classification workload (10,000 logs, one operation = one full run), implemented
+idiomatically in each language. Script parsing/compilation is excluded; each implementation gets
+1,000 warmup runs before JMH measurement. JDK 21, JMH 1.37, single fork and thread.
+
+| Implementation | Time per operation | Throughput | Relative to Java |
+|---|---:|---:|---:|
+| Plain Java | 0.308 ± 0.004 ms | ~32.5M logs/s | 1.00x |
+| TypeJava | 0.368 ± 0.003 ms | ~27.2M logs/s | 1.19x |
+| Rhino (JavaScript) | 2.727 ± 0.031 ms | ~3.67M logs/s | 8.9x |
+| Groovy | 3.276 ± 0.022 ms | ~3.05M logs/s | 10.6x |
+| BeanShell | 129.444 ± 1.374 ms | ~77k logs/s | 420x |
+
+Times are averages with 99.9% confidence intervals. Results are machine- and JVM-dependent, and
+relative factors vary by a few percent between runs.
+
+Reproduce with:
+
+```bash
+nix develop --command gradle :benchmarks:jmh
+```
+
+The Groovy, BeanShell, and Rhino runtimes are benchmark-only dependencies and are not part of the
+published library.
+
 ## Install
 
 Java 21 is required. Stable versions are published from `typejava-vX.Y.Z` tags; use the latest
@@ -79,10 +105,16 @@ java -jar typejava-0.2.0-all.jar script.tj
 
 ```java
 TypeJava.run(source, System.out);
+
+CompiledProgram program = TypeJava.compile(source);
+program.run(System.out);
+program.run(System.out);
 ```
 
-`console.log` writes to the supplied stream. Runtime exceptions from the generated program are
-allowed to escape unchanged.
+`console.log` writes to the supplied stream. `TypeJava.compile` parses, checks, and generates
+bytecode once; `CompiledProgram.run` executes that bytecode without recompiling. Use it when
+running the same script repeatedly. Compiled programs are reusable but not thread-safe. Runtime
+exceptions from the generated program are allowed to escape unchanged.
 
 ## Example
 

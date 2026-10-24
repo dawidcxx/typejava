@@ -6,10 +6,8 @@ import cc.kilonode.typejava.codegen.CodeGenerator;
 import cc.kilonode.typejava.lexer.Lexer;
 import cc.kilonode.typejava.parser.ParseResult;
 import cc.kilonode.typejava.parser.Parser;
-import cc.kilonode.typejava.runtime.Console;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -45,6 +43,20 @@ public final class TypeJava {
    * @param args arguments passed to the generated main method
    */
   public static void run(String source, PrintStream out, String... args) {
+    compile(source).run(out, args);
+  }
+
+  /**
+   * Compiles TypeJava source into a reusable program.
+   *
+   * <p>Compilation is fail-fast: the first lexical, syntax, or type error aborts the compile. Use
+   * this instead of {@link #run(String, PrintStream, String...)} when the same source is executed
+   * more than once.
+   *
+   * @param source TypeJava source
+   * @return the compiled program
+   */
+  public static CompiledProgram compile(String source) {
     ParseResult parsed = new Parser(new Lexer(source).tokenize()).parseWithSourceMap();
     CheckedProgram checked = new Checker(parsed.program(), parsed.sourceMap()).check();
     CodeGenerator generator = new CodeGenerator(checked);
@@ -52,25 +64,12 @@ public final class TypeJava {
 
     GeneratedClassLoader loader =
         new GeneratedClassLoader(TypeJava.class.getClassLoader(), classes);
-    PrintStream previous = Console.currentOut();
-    Console.setOut(out);
     try {
       Class<?> mainClass = loader.loadClass(generator.mainClassName());
       Method main = mainClass.getMethod("main", String[].class);
-      main.invoke(null, (Object) args);
-    } catch (InvocationTargetException exception) {
-      Throwable cause = exception.getCause();
-      if (cause instanceof RuntimeException runtime) {
-        throw runtime;
-      }
-      if (cause instanceof Error error) {
-        throw error;
-      }
-      throw new RuntimeException(cause);
+      return new CompiledProgram(main);
     } catch (ReflectiveOperationException exception) {
-      throw new IllegalStateException("Could not start generated TypeJava program", exception);
-    } finally {
-      Console.setOut(previous);
+      throw new IllegalStateException("Could not load generated TypeJava program", exception);
     }
   }
 

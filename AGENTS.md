@@ -9,12 +9,17 @@ Keep `README.md` user-facing. Put development, release, CI, and maintenance deta
 
 ## Modules
 
-- `:lib` — compiler, runtime, and public `TypeJava.run` API. This is the only published module.
+- `:lib` — compiler, runtime, and public `TypeJava` compile/run API. This is the only published
+  module.
 - `:cli` — command-line entry point, thin CLI jar, and self-contained fat jar. Depends on `:lib`.
 - `:examples` — runnable public-API demos. Depends only on `:lib`.
+- `:benchmarks` — JMH harness comparing TypeJava with plain Java, Groovy, BeanShell, and Rhino.
+  Depends on `:lib` plus benchmark-only language runtimes.
 
-Dependency direction is `:cli -> :lib` and `:examples -> :lib`. `:lib` must not depend on either.
-Do not publish `:cli` or `:examples` yet.
+Dependency direction is `:cli -> :lib`, `:examples -> :lib`, and `:benchmarks -> :lib`. `:lib` must
+not depend on any of them. Do not publish `:cli`, `:examples`, or `:benchmarks` yet. Groovy,
+BeanShell, and Rhino must stay `implementation` dependencies of `:benchmarks` and must never appear
+in `:lib` or its published POM.
 
 ## Commands
 
@@ -44,6 +49,18 @@ Run one example:
 
 ```bash
 nix develop --command gradle :examples:run --args="objects"
+```
+
+Run the JMH benchmarks (compilation is excluded; see `benchmarks/README.md`):
+
+```bash
+nix develop --command gradle :benchmarks:jmh
+```
+
+Run a single benchmark:
+
+```bash
+nix develop --command gradle :benchmarks:jmh --args="LogClassificationBenchmark.typeJava"
 ```
 
 Update lexer snapshots when token output intentionally changes:
@@ -119,9 +136,12 @@ present and the version is not a `-SNAPSHOT`. This prevents accidental snapshot 
 - `:lib` `codegen/` — ASM generation; object types get an abstract base class per nominal type and
   a subclass per method-bearing object-literal site
 - `:lib` `runtime/` — `Console`, `TjArray`, `TjMap`, and value formatting
-- `:lib` `TypeJava` — public `run`/`runFile` API and generated classloader
+- `:lib` `TypeJava` / `CompiledProgram` — public `compile`/`run`/`runFile` API and generated
+  classloader
 - `:cli` `Main` — argument parsing, file execution, usage, and exit codes
 - `:examples` `Main` — loads `.tj` resources and demonstrates only the public `TypeJava` API
+- `:benchmarks` — precompiles/parses every language workload in JMH setup so script compilation is
+  never measured; compares Java, TypeJava, Groovy, BeanShell, and Rhino on the same business rules
 
 ## Constraints
 
