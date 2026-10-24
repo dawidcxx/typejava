@@ -19,6 +19,7 @@ class ParserTest {
 
     Program expected =
         new Program(
+            List.of(),
             List.of(
                 new ExpressionStatement(
                     new CallExpression(
@@ -37,6 +38,6 @@ class ParserTest {
 
   @Test
   void parsesEmptyProgram() {
-    assertEquals(new Program(List.of()), parse(""));
+    assertEquals(new Program(List.of(), List.of()), parse(""));
   }
 }

@@ -35,6 +35,7 @@ class ParserExpressionTest {
 
     assertEquals(
         new Program(
+            List.of(),
             List.of(
                 new ExpressionStatement(
                     new MemberExpression(

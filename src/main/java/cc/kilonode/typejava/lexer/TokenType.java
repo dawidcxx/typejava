@@ -6,6 +6,7 @@ public enum TokenType {
   STRING,
   FUNCTION,
   RETURN,
+  TYPE,
   LET,
   CONST,
   IF,

@@ -17,7 +17,7 @@ import cc.kilonode.typejava.ast.NumericLiteral;
 import cc.kilonode.typejava.ast.Parameter;
 import cc.kilonode.typejava.ast.Program;
 import cc.kilonode.typejava.ast.ReturnStatement;
-import cc.kilonode.typejava.ast.TypeReference;
+import cc.kilonode.typejava.ast.NamedType;
 import cc.kilonode.typejava.ast.VariableDeclaration;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -29,13 +29,14 @@ class ParserProgramTest {
 
     Program expected =
         new Program(
+            List.of(),
             List.of(
                 new FunctionDeclaration(
                     "add",
                     List.of(
-                        new Parameter("a", new TypeReference("number")),
-                        new Parameter("b", new TypeReference("number"))),
-                    new TypeReference("number"),
+                        new Parameter("a", new NamedType("number")),
+                        new Parameter("b", new NamedType("number"))),
+                    new NamedType("number"),
                     new BlockStatement(
                         List.of(
                             new ReturnStatement(

@@ -9,7 +9,7 @@ import cc.kilonode.typejava.ast.NumericLiteral;
 import cc.kilonode.typejava.ast.Parameter;
 import cc.kilonode.typejava.ast.Program;
 import cc.kilonode.typejava.ast.ReturnStatement;
-import cc.kilonode.typejava.ast.TypeReference;
+import cc.kilonode.typejava.ast.NamedType;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -21,7 +21,7 @@ class ParserFunctionTest {
     FunctionDeclaration function = (FunctionDeclaration) program.statements().get(0);
     assertEquals("ping", function.name());
     assertEquals(List.of(), function.parameters());
-    assertEquals(new TypeReference("number"), function.returnType());
+    assertEquals(new NamedType("number"), function.returnType());
     assertEquals(
         new BlockStatement(List.of(new ReturnStatement(new NumericLiteral("1")))),
         function.body());
@@ -34,8 +34,8 @@ class ParserFunctionTest {
     FunctionDeclaration function = (FunctionDeclaration) program.statements().get(0);
     assertEquals(
         List.of(
-            new Parameter("a", new TypeReference("number")),
-            new Parameter("b", new TypeReference("string"))),
+            new Parameter("a", new NamedType("number")),
+            new Parameter("b", new NamedType("string"))),
         function.parameters());
   }
 

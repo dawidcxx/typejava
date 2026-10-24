@@ -11,12 +11,16 @@ import cc.kilonode.typejava.ast.FunctionDeclaration;
 import cc.kilonode.typejava.ast.Identifier;
 import cc.kilonode.typejava.ast.IfStatement;
 import cc.kilonode.typejava.ast.MemberExpression;
+import cc.kilonode.typejava.ast.NamedType;
 import cc.kilonode.typejava.ast.NumericLiteral;
+import cc.kilonode.typejava.ast.ObjectType;
 import cc.kilonode.typejava.ast.Parameter;
 import cc.kilonode.typejava.ast.Program;
 import cc.kilonode.typejava.ast.ReturnStatement;
 import cc.kilonode.typejava.ast.Statement;
 import cc.kilonode.typejava.ast.StringLiteral;
+import cc.kilonode.typejava.ast.TypeAliasDeclaration;
+import cc.kilonode.typejava.ast.TypeField;
 import cc.kilonode.typejava.ast.TypeReference;
 import cc.kilonode.typejava.ast.UnaryExpression;
 import cc.kilonode.typejava.ast.VariableDeclaration;
@@ -35,13 +39,29 @@ public final class Parser {
   }
 
   public Program parse() {
+    List<TypeAliasDeclaration> typeDeclarations = new ArrayList<>();
     List<Statement> statements = new ArrayList<>();
 
     while (!check(TokenType.EOF)) {
-      statements.add(statement());
+      if (check(TokenType.TYPE)) {
+        typeDeclarations.add(typeAliasDeclaration());
+      } else {
+        statements.add(statement());
+      }
     }
 
-    return new Program(statements);
+    return new Program(typeDeclarations, statements);
+  }
+
+  private TypeAliasDeclaration typeAliasDeclaration() {
+    consume(TokenType.TYPE, "Expected 'type'");
+    Token name = consume(TokenType.IDENTIFIER, "Expected type name after 'type'");
+    consume(TokenType.ASSIGN, "Expected '=' after type name");
+    TypeReference type = type();
+    consume(
+        TokenType.SEMICOLON,
+        "Expected ';' after type declaration (maybe you forgot a semicolon)");
+    return new TypeAliasDeclaration(name.lexeme(), type);
   }
 
   private Statement statement() {
@@ -134,7 +154,32 @@ public final class Parser {
   }
 
   private TypeReference type() {
-    return new TypeReference(consume(TokenType.IDENTIFIER, "Expected a type name").lexeme());
+    if (match(TokenType.IDENTIFIER)) {
+      return new NamedType(previous().lexeme());
+    }
+    if (match(TokenType.LBRACE)) {
+      return objectType();
+    }
+    throw error(peek(), "Expected a type name or object type");
+  }
+
+  private ObjectType objectType() {
+    List<TypeField> fields = new ArrayList<>();
+
+    while (!check(TokenType.RBRACE) && !check(TokenType.EOF)) {
+      Token name = consume(TokenType.IDENTIFIER, "Expected field name");
+      consume(
+          TokenType.COLON,
+          "Expected ':' and a type for field '" + name.lexeme() + "'");
+      TypeReference type = type();
+      consume(
+          TokenType.SEMICOLON,
+          "Expected ';' after field '" + name.lexeme() + "'");
+      fields.add(new TypeField(name.lexeme(), type));
+    }
+
+    consume(TokenType.RBRACE, "Expected '}' after object type");
+    return new ObjectType(fields);
   }
 
   private BlockStatement block() {

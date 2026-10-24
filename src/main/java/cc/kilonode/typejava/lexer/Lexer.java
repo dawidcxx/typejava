@@ -37,6 +37,7 @@ public final class Lexer {
             switch (text) {
               case "function" -> TokenType.FUNCTION;
               case "return" -> TokenType.RETURN;
+              case "type" -> TokenType.TYPE;
               case "let" -> TokenType.LET;
               case "const" -> TokenType.CONST;
               case "if" -> TokenType.IF;

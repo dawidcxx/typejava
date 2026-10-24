@@ -7,7 +7,7 @@ import cc.kilonode.typejava.ast.BinaryExpression;
 import cc.kilonode.typejava.ast.BooleanLiteral;
 import cc.kilonode.typejava.ast.NumericLiteral;
 import cc.kilonode.typejava.ast.Program;
-import cc.kilonode.typejava.ast.TypeReference;
+import cc.kilonode.typejava.ast.NamedType;
 import cc.kilonode.typejava.ast.VariableDeclaration;
 import cc.kilonode.typejava.ast.VariableKind;
 import org.junit.jupiter.api.Test;
@@ -20,7 +20,7 @@ class ParserVariableTest {
     VariableDeclaration declaration = (VariableDeclaration) program.statements().get(0);
     assertEquals(VariableKind.LET, declaration.kind());
     assertEquals("total", declaration.name());
-    assertEquals(new TypeReference("number"), declaration.type());
+    assertEquals(new NamedType("number"), declaration.type());
     assertEquals(
         new BinaryExpression(new NumericLiteral("1"), "+", new NumericLiteral("2")),
         declaration.initializer());
@@ -33,7 +33,7 @@ class ParserVariableTest {
     VariableDeclaration declaration = (VariableDeclaration) program.statements().get(0);
     assertEquals(VariableKind.CONST, declaration.kind());
     assertEquals("enabled", declaration.name());
-    assertEquals(new TypeReference("boolean"), declaration.type());
+    assertEquals(new NamedType("boolean"), declaration.type());
     assertEquals(new BooleanLiteral(true), declaration.initializer());
   }
 }
