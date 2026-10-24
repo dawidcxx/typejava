@@ -24,12 +24,13 @@ class ParserTypeDeclarationTest {
             "MyCustomType",
             new ObjectType(
                 List.of(
-                    new TypeField("a", new NamedType("number")),
-                    new TypeField("b", new NamedType("string")),
+                    new TypeField("a", false, new NamedType("number")),
+                    new TypeField("b", false, new NamedType("string")),
                     new TypeField(
                         "c",
+                        false,
                         new ObjectType(
-                            List.of(new TypeField("g", new NamedType("void"))))))));
+                            List.of(new TypeField("g", false, new NamedType("void"))))))));
 
     assertEquals(new Program(List.of(expected), List.of()), program);
   }
@@ -41,6 +42,18 @@ class ParserTypeDeclarationTest {
     assertEquals(
         new TypeAliasDeclaration("Empty", new ObjectType(List.of())),
         program.typeDeclarations().get(0));
+  }
+
+  @Test
+  void parsesReadonlyHostRecordFields() {
+    Program program = parse(read("host-entity.tj"));
+
+    ObjectType objectType = (ObjectType) program.typeDeclarations().get(0).type();
+    TypeField a = objectType.fields().get(0);
+    TypeField nested = objectType.fields().get(1);
+    assertEquals(new TypeField("a", true, new NamedType("number")), a);
+    assertEquals("nested", nested.name());
+    assertEquals(true, nested.readonly());
   }
 
   @Test
@@ -63,10 +76,10 @@ class ParserTypeDeclarationTest {
 
     FunctionDeclaration function = (FunctionDeclaration) program.statements().get(0);
     assertEquals(
-        new ObjectType(List.of(new TypeField("value", new NamedType("number")))),
+        new ObjectType(List.of(new TypeField("value", false, new NamedType("number")))),
         function.parameters().get(0).type());
     assertEquals(
-        new ObjectType(List.of(new TypeField("result", new NamedType("string")))),
+        new ObjectType(List.of(new TypeField("result", false, new NamedType("string")))),
         function.returnType());
     assertEquals(2, function.body().statements().size());
   }

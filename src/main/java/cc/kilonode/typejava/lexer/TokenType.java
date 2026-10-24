@@ -9,6 +9,7 @@ public enum TokenType {
   TYPE,
   LET,
   CONST,
+  READONLY,
   IF,
   ELSE,
   TRUE,

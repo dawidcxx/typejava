@@ -1,0 +1,9 @@
+type Point = { x: number; y: number; };
+
+function move(point: Point): Point {
+  point.x = point.x + 1;
+  point.y = point.y + 1;
+  return point;
+};
+
+console.log(move({ x: 0, y: 0 }).x);

@@ -8,7 +8,8 @@ import org.junit.jupiter.api.Test;
 class LexerKeywordTest {
   @Test
   void recognizesKeywords() {
-    List<Token> tokens = new Lexer("function return type let const if else true false").tokenize();
+    List<Token> tokens =
+        new Lexer("function return type let const readonly if else true false").tokenize();
 
     assertEquals(
         List.of(
@@ -17,6 +18,7 @@ class LexerKeywordTest {
             TokenType.TYPE,
             TokenType.LET,
             TokenType.CONST,
+            TokenType.READONLY,
             TokenType.IF,
             TokenType.ELSE,
             TokenType.TRUE,

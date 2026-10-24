@@ -1,0 +1,1 @@
+type SomeEntityComingFromAbove = { readonly a: number; readonly nested: { readonly b: string; }; };

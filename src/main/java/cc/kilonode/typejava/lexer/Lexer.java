@@ -40,6 +40,7 @@ public final class Lexer {
               case "type" -> TokenType.TYPE;
               case "let" -> TokenType.LET;
               case "const" -> TokenType.CONST;
+              case "readonly" -> TokenType.READONLY;
               case "if" -> TokenType.IF;
               case "else" -> TokenType.ELSE;
               case "true" -> TokenType.TRUE;

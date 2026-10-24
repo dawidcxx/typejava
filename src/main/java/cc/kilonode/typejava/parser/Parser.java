@@ -10,6 +10,7 @@ import cc.kilonode.typejava.ast.ExpressionStatement;
 import cc.kilonode.typejava.ast.FunctionDeclaration;
 import cc.kilonode.typejava.ast.Identifier;
 import cc.kilonode.typejava.ast.IfStatement;
+import cc.kilonode.typejava.ast.LValue;
 import cc.kilonode.typejava.ast.MemberExpression;
 import cc.kilonode.typejava.ast.NamedType;
 import cc.kilonode.typejava.ast.NumericLiteral;
@@ -193,6 +194,7 @@ public final class Parser {
     List<TypeField> fields = new ArrayList<>();
 
     while (!check(TokenType.RBRACE) && !check(TokenType.EOF)) {
+      boolean readonly = match(TokenType.READONLY);
       Token name = consume(TokenType.IDENTIFIER, "Expected field name");
       consume(
           TokenType.COLON,
@@ -201,7 +203,7 @@ public final class Parser {
       consume(
           TokenType.SEMICOLON,
           "Expected ';' after field '" + name.lexeme() + "'");
-      fields.add(located(new TypeField(name.lexeme(), type), name));
+      fields.add(located(new TypeField(name.lexeme(), readonly, type), name));
     }
 
     consume(TokenType.RBRACE, "Expected '}' after object type");
@@ -241,16 +243,19 @@ public final class Parser {
   }
 
   private Expression assignment() {
-    if (check(TokenType.IDENTIFIER) && checkNext(TokenType.ASSIGN)) {
-      Token start = peek();
-      Token name = advance();
-      Identifier target = located(new Identifier(name.lexeme()), name, name);
-      advance();
+    Token start = peek();
+    Expression expression = logicalOr();
+
+    if (check(TokenType.ASSIGN)) {
+      Token operator = advance();
+      if (!(expression instanceof LValue target)) {
+        throw error(operator, "Invalid assignment target");
+      }
       Expression value = assignment();
       return located(new AssignmentExpression(target, value), start);
     }
 
-    return logicalOr();
+    return expression;
   }
 
   private Expression logicalOr() {
@@ -471,10 +476,6 @@ public final class Parser {
 
   private boolean check(TokenType type) {
     return peek().type() == type;
-  }
-
-  private boolean checkNext(TokenType type) {
-    return current + 1 < tokens.size() && tokens.get(current + 1).type() == type;
   }
 
   private Token advance() {
