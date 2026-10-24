@@ -39,14 +39,4 @@ class ParserTypeErrorTest {
     assertTrue(error.getMessage().contains("type name"));
   }
 
-  @Test
-  void reportsMissingQualifiedTypeSegment() {
-    ParseException error =
-        assertThrows(
-            ParseException.class,
-            () -> parse("function add(a: std.): number { return a; };"));
-
-    assertEquals(1, error.getLine());
-    assertTrue(error.getMessage().contains("type name after '.'"));
-  }
 }

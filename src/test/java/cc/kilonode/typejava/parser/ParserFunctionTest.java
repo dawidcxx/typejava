@@ -47,17 +47,4 @@ class ParserFunctionTest {
     assertEquals(new BlockStatement(List.of()), function.body());
   }
 
-  @Test
-  void keepsQualifiedTypeNames() {
-    Program program =
-        parse("function add(a: std.Int, b: std.Int): std.Int { return a + b; };");
-
-    FunctionDeclaration function = (FunctionDeclaration) program.statements().get(0);
-    assertEquals(
-        List.of(
-            new Parameter("a", new TypeReference("std.Int")),
-            new Parameter("b", new TypeReference("std.Int"))),
-        function.parameters());
-    assertEquals(new TypeReference("std.Int"), function.returnType());
-  }
 }

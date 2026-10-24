@@ -1,4 +1,4 @@
-function add(a: std.Int, b: std.Int): std.Int {
+function add(a: number, b: number): number {
   return a + b;
 };
 

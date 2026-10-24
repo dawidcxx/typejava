@@ -7,20 +7,34 @@ import org.junit.jupiter.api.Test;
 
 class LexerKeywordTest {
   @Test
-  void recognizesFunctionAndReturnKeywords() {
-    List<Token> tokens = new Lexer("function return").tokenize();
+  void recognizesKeywords() {
+    List<Token> tokens = new Lexer("function return let const if else true false").tokenize();
 
     assertEquals(
-        List.of(TokenType.FUNCTION, TokenType.RETURN, TokenType.EOF),
+        List.of(
+            TokenType.FUNCTION,
+            TokenType.RETURN,
+            TokenType.LET,
+            TokenType.CONST,
+            TokenType.IF,
+            TokenType.ELSE,
+            TokenType.TRUE,
+            TokenType.FALSE,
+            TokenType.EOF),
         tokens.stream().map(Token::type).toList());
   }
 
   @Test
   void treatsKeywordsAsWholeWords() {
-    List<Token> tokens = new Lexer("functionality returnValue").tokenize();
+    List<Token> tokens = new Lexer("functionality returnValue letter constant").tokenize();
 
     assertEquals(
-        List.of(TokenType.IDENTIFIER, TokenType.IDENTIFIER, TokenType.EOF),
+        List.of(
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.EOF),
         tokens.stream().map(Token::type).toList());
   }
 }

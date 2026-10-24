@@ -1,12 +1,15 @@
 package cc.kilonode.typejava.parser;
 
+import cc.kilonode.typejava.ast.AssignmentExpression;
 import cc.kilonode.typejava.ast.BinaryExpression;
 import cc.kilonode.typejava.ast.BlockStatement;
+import cc.kilonode.typejava.ast.BooleanLiteral;
 import cc.kilonode.typejava.ast.CallExpression;
 import cc.kilonode.typejava.ast.Expression;
 import cc.kilonode.typejava.ast.ExpressionStatement;
 import cc.kilonode.typejava.ast.FunctionDeclaration;
 import cc.kilonode.typejava.ast.Identifier;
+import cc.kilonode.typejava.ast.IfStatement;
 import cc.kilonode.typejava.ast.MemberExpression;
 import cc.kilonode.typejava.ast.NumericLiteral;
 import cc.kilonode.typejava.ast.Parameter;
@@ -15,6 +18,9 @@ import cc.kilonode.typejava.ast.ReturnStatement;
 import cc.kilonode.typejava.ast.Statement;
 import cc.kilonode.typejava.ast.StringLiteral;
 import cc.kilonode.typejava.ast.TypeReference;
+import cc.kilonode.typejava.ast.UnaryExpression;
+import cc.kilonode.typejava.ast.VariableDeclaration;
+import cc.kilonode.typejava.ast.VariableKind;
 import cc.kilonode.typejava.lexer.Token;
 import cc.kilonode.typejava.lexer.TokenType;
 import java.util.ArrayList;
@@ -42,6 +48,12 @@ public final class Parser {
     if (check(TokenType.FUNCTION)) {
       return functionDeclaration();
     }
+    if (check(TokenType.LET) || check(TokenType.CONST)) {
+      return variableDeclaration();
+    }
+    if (check(TokenType.IF)) {
+      return ifStatement();
+    }
     if (check(TokenType.LBRACE)) {
       return block();
     }
@@ -67,6 +79,40 @@ public final class Parser {
     return new FunctionDeclaration(name.lexeme(), parameters, returnType, body);
   }
 
+  private VariableDeclaration variableDeclaration() {
+    Token keyword = advance();
+    VariableKind kind = keyword.type() == TokenType.LET ? VariableKind.LET : VariableKind.CONST;
+    Token name = consume(TokenType.IDENTIFIER, "Expected variable name after '" + keyword.lexeme() + "'");
+    consume(
+        TokenType.COLON,
+        "Expected ':' and a type annotation for variable '" + name.lexeme() + "'");
+    TypeReference type = type();
+    consume(
+        TokenType.ASSIGN,
+        "Expected '=' and an initializer for variable '" + name.lexeme() + "'");
+    Expression initializer = expression();
+    consume(
+        TokenType.SEMICOLON,
+        "Expected ';' after variable declaration (maybe you forgot a semicolon)");
+
+    return new VariableDeclaration(kind, name.lexeme(), type, initializer);
+  }
+
+  private IfStatement ifStatement() {
+    consume(TokenType.IF, "Expected 'if'");
+    consume(TokenType.LPAREN, "Expected '(' after 'if'");
+    Expression condition = expression();
+    consume(TokenType.RPAREN, "Expected ')' after if condition");
+    BlockStatement thenBranch = block();
+    Statement elseBranch = null;
+
+    if (match(TokenType.ELSE)) {
+      elseBranch = check(TokenType.IF) ? ifStatement() : block();
+    }
+
+    return new IfStatement(condition, thenBranch, elseBranch);
+  }
+
   private List<Parameter> parameters() {
     List<Parameter> parameters = new ArrayList<>();
 
@@ -88,15 +134,7 @@ public final class Parser {
   }
 
   private TypeReference type() {
-    Token first = consume(TokenType.IDENTIFIER, "Expected a type name");
-    StringBuilder name = new StringBuilder(first.lexeme());
-
-    while (match(TokenType.DOT)) {
-      Token part = consume(TokenType.IDENTIFIER, "Expected a type name after '.'");
-      name.append('.').append(part.lexeme());
-    }
-
-    return new TypeReference(name.toString());
+    return new TypeReference(consume(TokenType.IDENTIFIER, "Expected a type name").lexeme());
   }
 
   private BlockStatement block() {
@@ -124,18 +162,85 @@ public final class Parser {
   }
 
   private Expression expression() {
-    return additive();
+    return assignment();
   }
 
-  private Expression additive() {
-    Expression expression = postfix();
+  private Expression assignment() {
+    if (check(TokenType.IDENTIFIER) && checkNext(TokenType.ASSIGN)) {
+      Token name = advance();
+      advance();
+      Expression value = assignment();
+      return new AssignmentExpression(new Identifier(name.lexeme()), value);
+    }
 
-    while (match(TokenType.PLUS)) {
+    return logicalOr();
+  }
+
+  private Expression logicalOr() {
+    Expression expression = logicalAnd();
+
+    while (match(TokenType.OROR)) {
       String operator = previous().lexeme();
-      expression = new BinaryExpression(expression, operator, postfix());
+      expression = new BinaryExpression(expression, operator, logicalAnd());
     }
 
     return expression;
+  }
+
+  private Expression logicalAnd() {
+    Expression expression = equality();
+
+    while (match(TokenType.ANDAND)) {
+      String operator = previous().lexeme();
+      expression = new BinaryExpression(expression, operator, equality());
+    }
+
+    return expression;
+  }
+
+  private Expression equality() {
+    Expression expression = comparison();
+
+    while (match(TokenType.EQEQ) || match(TokenType.BANGEQ)) {
+      String operator = previous().lexeme();
+      expression = new BinaryExpression(expression, operator, comparison());
+    }
+
+    return expression;
+  }
+
+  private Expression comparison() {
+    Expression expression = additive();
+
+    while (match(TokenType.LT)
+        || match(TokenType.LTE)
+        || match(TokenType.GT)
+        || match(TokenType.GTE)) {
+      String operator = previous().lexeme();
+      expression = new BinaryExpression(expression, operator, additive());
+    }
+
+    return expression;
+  }
+
+  private Expression additive() {
+    Expression expression = unary();
+
+    while (match(TokenType.PLUS)) {
+      String operator = previous().lexeme();
+      expression = new BinaryExpression(expression, operator, unary());
+    }
+
+    return expression;
+  }
+
+  private Expression unary() {
+    if (match(TokenType.BANG)) {
+      String operator = previous().lexeme();
+      return new UnaryExpression(operator, unary());
+    }
+
+    return postfix();
   }
 
   private Expression postfix() {
@@ -178,6 +283,12 @@ public final class Parser {
     if (match(TokenType.STRING)) {
       return new StringLiteral(previous().value());
     }
+    if (match(TokenType.TRUE)) {
+      return new BooleanLiteral(true);
+    }
+    if (match(TokenType.FALSE)) {
+      return new BooleanLiteral(false);
+    }
     if (match(TokenType.LPAREN)) {
       Expression expression = expression();
       consume(TokenType.RPAREN, "Expected ')' after expression");
@@ -204,6 +315,10 @@ public final class Parser {
 
   private boolean check(TokenType type) {
     return peek().type() == type;
+  }
+
+  private boolean checkNext(TokenType type) {
+    return current + 1 < tokens.size() && tokens.get(current + 1).type() == type;
   }
 
   private Token advance() {

@@ -1,0 +1,17 @@
+function classify(n: number): number {
+  let result: number = 0;
+  const threshold: number = 10;
+  const matched: boolean = n >= threshold;
+
+  if (matched && !false) {
+    result = 1;
+  } else if (n == threshold) {
+    result = 2;
+  } else {
+    result = 3;
+  }
+
+  return result;
+};
+
+console.log(classify(5));

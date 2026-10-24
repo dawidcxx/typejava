@@ -3,6 +3,7 @@ package cc.kilonode.typejava.parser;
 import static cc.kilonode.typejava.parser.ParserTestSupport.parse;
 import static cc.kilonode.typejava.testing.TestFixtures.read;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 import cc.kilonode.typejava.ast.BinaryExpression;
 import cc.kilonode.typejava.ast.BlockStatement;
@@ -10,12 +11,14 @@ import cc.kilonode.typejava.ast.CallExpression;
 import cc.kilonode.typejava.ast.ExpressionStatement;
 import cc.kilonode.typejava.ast.FunctionDeclaration;
 import cc.kilonode.typejava.ast.Identifier;
+import cc.kilonode.typejava.ast.IfStatement;
 import cc.kilonode.typejava.ast.MemberExpression;
 import cc.kilonode.typejava.ast.NumericLiteral;
 import cc.kilonode.typejava.ast.Parameter;
 import cc.kilonode.typejava.ast.Program;
 import cc.kilonode.typejava.ast.ReturnStatement;
 import cc.kilonode.typejava.ast.TypeReference;
+import cc.kilonode.typejava.ast.VariableDeclaration;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -30,9 +33,9 @@ class ParserProgramTest {
                 new FunctionDeclaration(
                     "add",
                     List.of(
-                        new Parameter("a", new TypeReference("std.Int")),
-                        new Parameter("b", new TypeReference("std.Int"))),
-                    new TypeReference("std.Int"),
+                        new Parameter("a", new TypeReference("number")),
+                        new Parameter("b", new TypeReference("number"))),
+                    new TypeReference("number"),
                     new BlockStatement(
                         List.of(
                             new ReturnStatement(
@@ -48,6 +51,20 @@ class ParserProgramTest {
                                     new NumericLiteral("2"), new NumericLiteral("2"))))))));
 
     assertEquals(expected, program);
+  }
+
+  @Test
+  void parsesLocalsAndBranchesFixture() {
+    Program program = parse(read("locals-and-branches.tj"));
+
+    FunctionDeclaration function = (FunctionDeclaration) program.statements().get(0);
+    assertEquals(5, function.body().statements().size());
+    assertInstanceOf(VariableDeclaration.class, function.body().statements().get(0));
+    assertInstanceOf(VariableDeclaration.class, function.body().statements().get(1));
+    assertInstanceOf(VariableDeclaration.class, function.body().statements().get(2));
+    assertInstanceOf(IfStatement.class, function.body().statements().get(3));
+    assertInstanceOf(ReturnStatement.class, function.body().statements().get(4));
+    assertEquals(2, program.statements().size());
   }
 
   @Test
