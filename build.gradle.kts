@@ -6,7 +6,9 @@ plugins {
 }
 
 group = providers.gradleProperty("GROUP").get()
-version = providers.gradleProperty("VERSION_NAME").get()
+version = providers.gradleProperty("version")
+    .orElse(providers.gradleProperty("VERSION_NAME"))
+    .get()
 
 java {
     toolchain {
@@ -40,10 +42,39 @@ tasks.withType<AbstractArchiveTask>().configureEach {
 tasks.jar {
     manifest {
         attributes["Automatic-Module-Name"] = "cc.kilonode.typejava"
+    }
+}
+
+val cliJar = tasks.register<Jar>("cliJar") {
+    group = "build"
+    description = "Builds the self-contained TypeJava command-line jar."
+    archiveClassifier = "all"
+
+    manifest {
+        attributes["Automatic-Module-Name"] = "cc.kilonode.typejava.cli"
         attributes["Main-Class"] = "cc.kilonode.typejava.TypeJava"
     }
+
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
+    from(sourceSets.main.get().output)
+    from({
+        configurations.runtimeClasspath.get().map { dependency ->
+            if (dependency.isDirectory) dependency else zipTree(dependency)
+        }
+    }) {
+        exclude(
+            "META-INF/*.SF",
+            "META-INF/*.DSA",
+            "META-INF/*.RSA",
+            "META-INF/MANIFEST.MF",
+            "module-info.class",
+            "META-INF/versions/*/module-info.class",
+        )
+    }
+}
+
+tasks.named("assemble") {
+    dependsOn(cliJar)
 }
 
 publishing {
@@ -84,8 +115,9 @@ publishing {
     repositories {
         val repository = providers.environmentVariable("GITHUB_REPOSITORY").orNull
         val token = providers.environmentVariable("GITHUB_TOKEN").orNull
+        val snapshot = version.toString().endsWith("-SNAPSHOT")
 
-        if (repository != null && token != null) {
+        if (repository != null && token != null && !snapshot) {
             maven {
                 name = "GitHubPackages"
                 url = uri("https://maven.pkg.github.com/$repository")

@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "typejava-v*"
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release tag
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "$tag" =~ ^typejava-v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag '$tag' is not a valid TypeJava release tag (expected typejava-vX.Y.Z)"
+            exit 1
+          fi
+
+          version="${tag#typejava-v}"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+          git fetch origin main --no-tags
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Release tag '$tag' must point to a commit on main"
+            exit 1
+          fi
+          echo "Releasing $version from $GITHUB_SHA"
+
+      - uses: cachix/install-nix-action@v31
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/daemon
+            ~/.gradle/native
+          key: gradle-${{ runner.os }}-${{ hashFiles('build.gradle.kts', 'settings.gradle.kts', 'gradle.properties', 'gradle/libs.versions.toml') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Build and publish package
+        run: >-
+          nix develop --command gradle --no-daemon build publish
+          -Pversion="$VERSION"
+
+      - name: Create GitHub release
+        shell: bash
+        run: |
+          cd build/libs
+          sha256sum \
+            "typejava-$VERSION.jar" \
+            "typejava-$VERSION-sources.jar" \
+            "typejava-$VERSION-javadoc.jar" \
+            "typejava-$VERSION-all.jar" \
+            > SHA256SUMS
+
+          prerelease=()
+          if [[ "$VERSION" == *-* ]]; then
+            prerelease+=(--prerelease)
+          fi
+
+          gh release create "$GITHUB_REF_NAME" \
+            "typejava-$VERSION.jar" \
+            "typejava-$VERSION-sources.jar" \
+            "typejava-$VERSION-javadoc.jar" \
+            "typejava-$VERSION-all.jar" \
+            SHA256SUMS \
+            --title "TypeJava $VERSION" \
+            --generate-notes \
+            --verify-tag \
+            "${prerelease[@]}"

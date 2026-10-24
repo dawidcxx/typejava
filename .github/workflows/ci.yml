@@ -2,15 +2,36 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  check:
+  build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - uses: cachix/install-nix-action@v31
-      - run: nix develop --command gradle check
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/daemon
+            ~/.gradle/native
+          key: gradle-${{ runner.os }}-${{ hashFiles('build.gradle.kts', 'settings.gradle.kts', 'gradle.properties', 'gradle/libs.versions.toml') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - run: nix develop --command gradle --no-daemon build

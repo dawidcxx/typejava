@@ -1,47 +1,92 @@
 
-> ⚠️ **Work in progress.** The language, standard library, and this README are subject to change. The supported subset runs, but expect gaps and breaking changes.
-
-> ⚠️ **AI slop.** But still probably better than other solutions out there
+> ⚠️ **Work in progress.** TypeJava is usable, but the language and runtime are still changing.
 
 # TypeJava
 
 TypeScript-flavoured scripting on the JVM, compiled to bytecode with ASM.
 
-It is not TypeScript, and it is not trying to be JavaScript. TypeJava is a small, typed language for
-rule engines and embedded scripts. It reads like TypeScript, compiles to bytecode, and has no
-interest in shipping a browser runtime.
+TypeJava is a small, typed language for rule engines and embedded scripts. It reads like
+TypeScript, compiles to bytecode, and does not try to be JavaScript or ship a browser runtime.
 
 ## Status
 
-Early development, but the example below now compiles and runs. The lexer, parser, checker, and ASM
-code generator cover the documented subset. The bundled runtime is intentionally small: `console`
-plus the `TjArray` and `TjMap` methods used here. The compatibility reference is still a WIP part of
-the future standard library.
+The example below compiles to JVM bytecode and runs. Compilation is fail-fast: the first lexical,
+syntax, or type error aborts the run.
 
-Generics are deliberately small: type parameters on type declarations and explicit type arguments
-on named types. There are no user-declared generic functions or methods yet.
+Named object types are nominal. The only union form is `T | null`; there is no `undefined` or
+optional-property syntax. Generics are limited to type declarations and explicit type arguments.
 
-`T | null` is the absence representation. There is no `undefined`, no optional-property syntax, and
-no general unions: the only union form is a nullable pair with `null`. Normalize incoming optionals
-and nullables at the boundary.
+Not supported yet: imports/modules, exceptions, inheritance, overloads, lambdas or first-class
+function values, array/map literals, general unions, type switches, and generic functions/methods.
 
-Compilation is fail-fast: the first lexical, syntax, or type error aborts the run. There is no error
-recovery and there are no warnings.
+## Install
 
-The runnable subset currently includes top-level functions, typed variables (`let`/`const`),
-`if`/`else`, `while`, `break`, `continue`, object type aliases, object literals with methods,
-generic type aliases and applications, numeric/string/boolean values, `null`, nullable narrowing,
-and the bundled `console`, `TjArray`, and `TjMap` methods used above.
+Java 21 is required. Stable versions are published from `typejava-vX.Y.Z` tags; use the latest
+version from [GitHub Releases](https://github.com/dawidcxx/typejava/releases).
 
-Not supported yet: imports or modules, exceptions, inheritance, overloads, lambdas or first-class
-function values, array/map literals, optional properties, `undefined`, general unions, type switches,
-and generic functions or methods.
+### Gradle
+
+```kotlin
+repositories {
+    maven {
+        url = uri("https://maven.pkg.github.com/dawidcxx/typejava")
+        credentials {
+            username = System.getenv("GITHUB_ACTOR")
+            password = System.getenv("GITHUB_TOKEN")
+        }
+    }
+}
+
+dependencies {
+    implementation("cc.kilonode:typejava:0.1.0")
+}
+```
+
+### Maven
+
+Add the GitHub Packages repository:
+
+```xml
+<repository>
+  <id>github</id>
+  <url>https://maven.pkg.github.com/dawidcxx/typejava</url>
+</repository>
+```
+
+Then depend on it:
+
+```xml
+<dependency>
+  <groupId>cc.kilonode</groupId>
+  <artifactId>typejava</artifactId>
+  <version>0.1.0</version>
+</dependency>
+```
+
+Add a `github` server to `~/.m2/settings.xml` with your GitHub username and a classic personal
+access token with `read:packages`. GitHub Packages requires authentication even for public
+packages.
+
+### CLI
+
+Download `typejava-<version>-all.jar` from Releases:
+
+```bash
+java -jar typejava-0.1.0-all.jar script.tj
+```
+
+### Java API
+
+```java
+TypeJava.run(source, System.out);
+```
+
+`console.log` writes to the supplied stream. Runtime exceptions from the generated program are
+allowed to escape unchanged.
 
 ## Example
 
 ```ts
-/// <reference path="typed-java-compatibility" />
-
 type UpstreamLog = {
   readonly service: string;
   readonly message: string;
@@ -185,51 +230,3 @@ const boxed: Box<UpstreamLog> = { value: logs.get(0) };
 console.log("boxed service: " + boxed.value.service);
 console.log("classified " + summary.total + ", critical " + summary.critical);
 ```
-
-## Requirements
-
-- Java 21
-- Nix with flakes (recommended; provides Gradle and the toolchain)
-
-The Gradle wrapper is intentionally not checked in. Gradle comes from the Nix dev shell.
-
-## Development
-
-```bash
-direnv allow        # or: nix develop
-gradle check
-gradle build
-```
-
-Without entering the shell:
-
-```bash
-nix develop --command gradle check
-```
-
-Build outputs land in `build/libs/`.
-
-## Running
-
-Build the jar, then point the entry point at a `.tj` file:
-
-```bash
-nix develop --command gradle jar
-java -jar build/libs/typejava-0.1.0-SNAPSHOT.jar example.tj
-```
-
-The same program can be run from Java:
-
-```java
-TypeJava.run(source, System.out);
-```
-
-`console.log` writes to the supplied stream. Any runtime exception from the generated program is
-allowed to escape unchanged.
-
-## Artifacts
-
-- Group: `cc.kilonode`
-- Artifact: `typejava`
-- Version: see `VERSION_NAME` in `gradle.properties`
-- Java: 21
