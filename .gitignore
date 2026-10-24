@@ -1,0 +1,10 @@
+.gradle/
+build/
+.idea/
+*.iml
+.env
+.envrc.local
+.direnv/
+result
+result-*
+.DS_Store

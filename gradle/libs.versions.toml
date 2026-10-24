@@ -1,0 +1,9 @@
+[versions]
+asm = "9.11.1"
+junit = "5.14.4"
+junit-platform = "1.14.4"
+
+[libraries]
+asm = { module = "org.ow2.asm:asm", version.ref = "asm" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
