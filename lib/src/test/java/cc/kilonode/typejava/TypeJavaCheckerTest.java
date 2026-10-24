@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cc.kilonode.typejava.testing.TestFixtures;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -131,7 +132,9 @@ class TypeJavaCheckerTest {
 
   private static void assertError(String source, String message) {
     RuntimeException exception =
-        assertThrows(RuntimeException.class, () -> TypeJava.run(source, sink()));
+        assertThrows(
+            RuntimeException.class,
+            () -> TypeJava.run(source, TestFixtures.environment(sink())));
     assertTrue(
         exception.getMessage().contains(message),
         () -> "Expected message containing '" + message + "' but got: " + exception.getMessage());
@@ -139,7 +142,8 @@ class TypeJavaCheckerTest {
 
   private static String run(String source) {
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-    TypeJava.run(source, new PrintStream(bytes, true, StandardCharsets.UTF_8));
+    PrintStream out = new PrintStream(bytes, true, StandardCharsets.UTF_8);
+    TypeJava.run(source, TestFixtures.environment(out));
     return bytes.toString(StandardCharsets.UTF_8);
   }
 

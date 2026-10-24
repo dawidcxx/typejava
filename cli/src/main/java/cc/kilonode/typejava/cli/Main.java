@@ -1,5 +1,7 @@
 package cc.kilonode.typejava.cli;
 
+import cc.kilonode.typejava.Environment;
+import cc.kilonode.typejava.Io;
 import cc.kilonode.typejava.TypeJava;
 import cc.kilonode.typejava.checker.CheckException;
 import cc.kilonode.typejava.lexer.LexerException;
@@ -22,7 +24,18 @@ public final class Main {
     }
 
     try {
-      TypeJava.runFile(Path.of(args[0]), out);
+      Environment environment =
+          TypeJava.environment()
+              .io(
+                  new Io() {
+                    @Override
+                    public void println(String line) {
+                      out.println(line);
+                    }
+                  })
+              .withStd()
+              .build();
+      TypeJava.runFile(Path.of(args[0]), environment);
       return 0;
     } catch (ParseException | CheckException | LexerException | IOException exception) {
       err.println("error: " + exception.getMessage());

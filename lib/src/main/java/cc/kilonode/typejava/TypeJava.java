@@ -7,7 +7,6 @@ import cc.kilonode.typejava.lexer.Lexer;
 import cc.kilonode.typejava.parser.ParseResult;
 import cc.kilonode.typejava.parser.Parser;
 import java.io.IOException;
-import java.io.PrintStream;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,52 +29,58 @@ public final class TypeJava {
     return "typejava";
   }
 
-  /** Runs a TypeJava program, writing console output to {@link System#out}. */
-  public static void run(String source) {
-    run(source, System.out);
+  /** Starts a new environment configuration. */
+  public static Environment.Builder environment() {
+    return Environment.builder();
   }
 
   /**
    * Compiles and runs a TypeJava program.
    *
    * @param source TypeJava source
-   * @param out destination for {@code console.log}
-   * @param args arguments passed to the generated main method
+   * @param environment environment used to compile and run the program
    */
-  public static void run(String source, PrintStream out, String... args) {
-    compile(source).run(out, args);
+  public static void run(String source, Environment environment) {
+    compile(source, environment).run();
   }
 
   /**
    * Compiles TypeJava source into a reusable program.
    *
    * <p>Compilation is fail-fast: the first lexical, syntax, or type error aborts the compile. Use
-   * this instead of {@link #run(String, PrintStream, String...)} when the same source is executed
-   * more than once.
+   * this when the same source is executed more than once.
    *
    * @param source TypeJava source
+   * @param environment environment used to compile the program
    * @return the compiled program
    */
-  public static CompiledProgram compile(String source) {
+  public static CompiledProgram compile(String source, Environment environment) {
     ParseResult parsed = new Parser(new Lexer(source).tokenize()).parseWithSourceMap();
-    CheckedProgram checked = new Checker(parsed.program(), parsed.sourceMap()).check();
-    CodeGenerator generator = new CodeGenerator(checked);
+    CheckedProgram checked =
+        new Checker(parsed.program(), parsed.sourceMap(), environment).check();
+    CodeGenerator generator = new CodeGenerator(checked, environment);
     Map<String, byte[]> classes = generator.generate();
 
     GeneratedClassLoader loader =
         new GeneratedClassLoader(TypeJava.class.getClassLoader(), classes);
     try {
-      Class<?> mainClass = loader.loadClass(generator.mainClassName());
-      Method main = mainClass.getMethod("main", String[].class);
-      return new CompiledProgram(main);
+      Class<?> programClass = loader.loadClass(generator.mainClassName());
+      Method run = programClass.getMethod("run", Environment.class);
+      return new CompiledProgram(run, environment);
     } catch (ReflectiveOperationException exception) {
       throw new IllegalStateException("Could not load generated TypeJava program", exception);
     }
   }
 
-  /** Reads and runs a TypeJava source file. */
-  public static void runFile(Path path, PrintStream out, String... args) throws IOException {
-    run(Files.readString(path), out, args);
+  /**
+   * Reads and runs a TypeJava source file.
+   *
+   * @param path source file
+   * @param environment environment used to compile and run the program
+   * @throws IOException if the file cannot be read
+   */
+  public static void runFile(Path path, Environment environment) throws IOException {
+    run(Files.readString(path), environment);
   }
 
   private static final class GeneratedClassLoader extends ClassLoader {

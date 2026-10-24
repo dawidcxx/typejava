@@ -206,7 +206,8 @@ class TypeJavaRuntimeTest {
 
   private static String runSource(String source) {
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-    TypeJava.run(source, new PrintStream(bytes, true, StandardCharsets.UTF_8));
+    PrintStream out = new PrintStream(bytes, true, StandardCharsets.UTF_8);
+    TypeJava.run(source, TestFixtures.environment(out));
     return bytes.toString(StandardCharsets.UTF_8);
   }
 }

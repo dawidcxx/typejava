@@ -2,6 +2,9 @@ package cc.kilonode.typejava.codegen;
 
 import static org.objectweb.asm.Opcodes.*;
 
+import cc.kilonode.typejava.Environment;
+import cc.kilonode.typejava.NativeMethod;
+import cc.kilonode.typejava.NativeType;
 import cc.kilonode.typejava.ast.AssignmentExpression;
 import cc.kilonode.typejava.ast.BinaryExpression;
 import cc.kilonode.typejava.ast.BlockStatement;
@@ -53,13 +56,14 @@ import org.objectweb.asm.MethodVisitor;
 
 public final class CodeGenerator {
   private static final String RUNTIME = "cc/kilonode/typejava/runtime/";
+  private static final String ENVIRONMENT = "cc/kilonode/typejava/Environment";
+  private static final String ENV_DESCRIPTOR = "L" + ENVIRONMENT + ";";
   private static final String CONSOLE = RUNTIME + "Console";
   private static final String VALUES = RUNTIME + "Values";
-  private static final String ARRAY = RUNTIME + "TjArray";
-  private static final String MAP = RUNTIME + "TjMap";
   private static final AtomicLong RUN_IDS = new AtomicLong();
 
   private final CheckedProgram checked;
+  private final Environment environment;
   private final String prefix;
   private final String mainInternal;
   private final Map<String, byte[]> classes = new LinkedHashMap<>();
@@ -72,8 +76,9 @@ public final class CodeGenerator {
   private final Map<ObjectLiteralInfo, String> literalNames = new IdentityHashMap<>();
   private int literalCounter;
 
-  public CodeGenerator(CheckedProgram checked) {
+  public CodeGenerator(CheckedProgram checked, Environment environment) {
     this.checked = checked;
+    this.environment = environment;
     long id = RUN_IDS.incrementAndGet();
     this.prefix = "cc/kilonode/typejava/generated/TypeJava$" + id + "$";
     this.mainInternal = prefix + "Program";
@@ -187,10 +192,11 @@ public final class CodeGenerator {
       generateStaticFunction(writer, function);
     }
 
-    MethodVisitor main =
-        writer.visitMethod(ACC_PUBLIC | ACC_STATIC, "main", "([Ljava/lang/String;)V", null, null);
-    main.visitCode();
-    MethodContext context = new MethodContext(main, "V", null);
+    MethodVisitor run =
+        writer.visitMethod(
+            ACC_PUBLIC | ACC_STATIC, "run", "(" + ENV_DESCRIPTOR + ")V", null, null);
+    run.visitCode();
+    MethodContext context = new MethodContext(run, "V", null, 0);
     context.nextSlot = 1;
     for (Statement statement : checked.program.statements()) {
       if (statement instanceof FunctionDeclaration) {
@@ -198,9 +204,9 @@ public final class CodeGenerator {
       }
       compileStatement(statement, context);
     }
-    main.visitInsn(RETURN);
-    main.visitMaxs(0, 0);
-    main.visitEnd();
+    run.visitInsn(RETURN);
+    run.visitMaxs(0, 0);
+    run.visitEnd();
 
     writer.visitEnd();
     classes.put(mainInternal, writer.toByteArray());
@@ -213,8 +219,9 @@ public final class CodeGenerator {
         writer.visitMethod(
             ACC_PUBLIC | ACC_STATIC, functionNames.get(function), descriptor, null, null);
     method.visitCode();
-    MethodContext context = new MethodContext(method, descriptor(function.returnType()), function.returnType());
-    int slot = 0;
+    MethodContext context =
+        new MethodContext(method, descriptor(function.returnType()), function.returnType(), 0);
+    int slot = 1;
     for (int i = 0; i < declaration.parameters().size(); i++) {
       Parameter parameter = declaration.parameters().get(i);
       VariableSymbol symbol = checked.parameterSymbols.get(parameter);
@@ -278,16 +285,16 @@ public final class CodeGenerator {
         writer.visitMethod(ACC_PUBLIC, methodNames.get(field), descriptor, null, null);
     method.visitCode();
 
-    int baseSlot = 1;
+    int baseSlot = 1 + slotSize(ENV_DESCRIPTOR);
     for (Type parameter : erased.parameters()) {
       baseSlot += slotSize(descriptor(parameter));
     }
     MethodContext context =
-        new MethodContext(method, descriptor(erased.returnType()), declared.returnType());
+        new MethodContext(method, descriptor(erased.returnType()), declared.returnType(), 1);
     context.nextSlot = baseSlot;
 
     int offset = declared.receiver() == null ? 0 : 1;
-    int erasedSlot = 1;
+    int erasedSlot = 1 + slotSize(ENV_DESCRIPTOR);
     for (int i = 0; i < erased.parameters().size(); i++) {
       Type erasedParameter = erased.parameters().get(i);
       Type declaredParameter = declared.parameters().get(i);
@@ -696,6 +703,7 @@ public final class CodeGenerator {
     CallTarget target = checked.calls.get(call);
     if (target instanceof CallTarget.StaticFunction staticCall) {
       FunctionSymbol function = staticCall.symbol();
+      loadEnvironment(context);
       for (int i = 0; i < call.arguments().size(); i++) {
         Type argumentType = compileExpression(call.arguments().get(i), context);
         emitCoerceToDescriptor(
@@ -712,6 +720,7 @@ public final class CodeGenerator {
       MemberExpression member = (MemberExpression) call.callee();
       Type receiverType = compileExpression(member.object(), context);
       emitCoerce(receiverType, methodCall.receiverType(), context);
+      loadEnvironment(context);
       String descriptor = functionDescriptor(methodCall.declaredType());
       for (int i = 0; i < call.arguments().size(); i++) {
         Type argumentType = compileExpression(call.arguments().get(i), context);
@@ -734,6 +743,7 @@ public final class CodeGenerator {
     }
 
     if (target instanceof CallTarget.ConsoleLog) {
+      loadEnvironment(context);
       pushInt(call.arguments().size(), context);
       context.method.visitTypeInsn(ANEWARRAY, "java/lang/Object");
       for (int i = 0; i < call.arguments().size(); i++) {
@@ -747,66 +757,45 @@ public final class CodeGenerator {
           INVOKESTATIC,
           CONSOLE,
           "log",
-          "([Ljava/lang/Object;)V",
+          "(" + ENV_DESCRIPTOR + "[Ljava/lang/Object;)V",
           false);
       return;
     }
 
-    if (target instanceof CallTarget.BuiltinCreate create) {
-      String runtime =
-          create.builtin() == CallTarget.Builtin.ARRAY ? ARRAY : MAP;
-      context.method.visitTypeInsn(NEW, runtime);
-      context.method.visitInsn(DUP);
-      context.method.visitMethodInsn(INVOKESPECIAL, runtime, "<init>", "()V", false);
-      return;
-    }
-
-    if (target instanceof CallTarget.BuiltinMethod methodCall) {
+    if (target instanceof CallTarget.NativeCall nativeCall) {
       MemberExpression member = (MemberExpression) call.callee();
-      compileExpression(member.object(), context);
-      String runtime = methodCall.builtin() == CallTarget.Builtin.ARRAY ? ARRAY : MAP;
-      String name = methodCall.name();
-      String descriptor;
-      if (methodCall.builtin() == CallTarget.Builtin.ARRAY) {
-        descriptor =
-            switch (name) {
-              case "size" -> "()I";
-              case "get" -> "(I)Ljava/lang/Object;";
-              case "add" -> "(Ljava/lang/Object;)V";
-              default -> throw new IllegalStateException(name);
-            };
-        if (name.equals("get")) {
-          Type argumentType = compileExpression(call.arguments().get(0), context);
-          emitCoerceToDescriptor(argumentType, "I", context);
-        } else if (name.equals("add")) {
-          Type argumentType = compileExpression(call.arguments().get(0), context);
-          emitCoerceToDescriptor(argumentType, "Ljava/lang/Object;", context);
-        }
-      } else {
-        descriptor =
-            switch (name) {
-              case "size" -> "()I";
-              case "get" -> "(Ljava/lang/Object;)Ljava/lang/Object;";
-              case "put" -> "(Ljava/lang/Object;Ljava/lang/Object;)V";
-              case "containsKey" -> "(Ljava/lang/Object;)Z";
-              default -> throw new IllegalStateException(name);
-            };
-        if (name.equals("get") || name.equals("containsKey")) {
-          Type argumentType = compileExpression(call.arguments().get(0), context);
-          emitCoerceToDescriptor(argumentType, "Ljava/lang/Object;", context);
-        } else if (name.equals("put")) {
-          Type keyType = compileExpression(call.arguments().get(0), context);
-          emitCoerceToDescriptor(keyType, "Ljava/lang/Object;", context);
-          Type valueType = compileExpression(call.arguments().get(1), context);
-          emitCoerceToDescriptor(valueType, "Ljava/lang/Object;", context);
-        }
+      NativeMethod method = nativeCall.method();
+      if (!method.isStatic()) {
+        Type receiverType = compileExpression(member.object(), context);
+        emitCoerce(receiverType, nativeCall.receiverType(), context);
       }
-      context.method.visitMethodInsn(INVOKEVIRTUAL, runtime, name, descriptor, false);
-      emitDescriptorToType(returnDescriptor(descriptor), methodCall.returnType(), context);
+      if (method.injectsEnvironment()) {
+        loadEnvironment(context);
+      }
+      org.objectweb.asm.Type[] argumentTypes =
+          org.objectweb.asm.Type.getArgumentTypes(method.descriptor());
+      int offset = method.injectsEnvironment() ? 1 : 0;
+      for (int i = 0; i < call.arguments().size(); i++) {
+        Type argumentType = compileExpression(call.arguments().get(i), context);
+        emitCoerceToDescriptor(
+            argumentType, argumentTypes[i + offset].getDescriptor(), context);
+      }
+      context.method.visitMethodInsn(
+          method.isStatic() ? INVOKESTATIC : INVOKEVIRTUAL,
+          nativeCall.type().internalName(),
+          method.name(),
+          method.descriptor(),
+          false);
+      emitDescriptorToType(
+          returnDescriptor(method.descriptor()), nativeCall.returnType(), context);
       return;
     }
 
     throw new IllegalStateException("Unsupported call target " + target);
+  }
+
+  private void loadEnvironment(MethodContext context) {
+    context.method.visitVarInsn(ALOAD, context.envSlot);
   }
 
   private void compileObjectLiteral(ObjectLiteral literal, MethodContext context) {
@@ -856,7 +845,7 @@ public final class CodeGenerator {
   }
 
   private String functionDescriptor(FunctionSymbol function) {
-    StringBuilder descriptor = new StringBuilder("(");
+    StringBuilder descriptor = new StringBuilder("(").append(ENV_DESCRIPTOR);
     for (Type parameter : function.parameterTypes()) {
       descriptor.append(descriptor(parameter));
     }
@@ -865,7 +854,7 @@ public final class CodeGenerator {
   }
 
   private String functionDescriptor(Type.Function function) {
-    StringBuilder descriptor = new StringBuilder("(");
+    StringBuilder descriptor = new StringBuilder("(").append(ENV_DESCRIPTOR);
     for (Type parameter : function.parameters()) {
       descriptor.append(descriptor(parameter));
     }
@@ -886,17 +875,15 @@ public final class CodeGenerator {
       return "Ljava/lang/Object;";
     }
     if (type instanceof Type.Nominal nominal) {
-      return switch (nominal.name()) {
-        case "TjArray" -> "L" + ARRAY + ";";
-        case "TjMap" -> "L" + MAP + ";";
-        default -> {
-          ObjectTypeInfo info = objectInfosByName.get(nominal.name());
-          if (info == null) {
-            throw new IllegalStateException("No class for type " + nominal.name());
-          }
-          yield "L" + baseNames.get(info) + ";";
-        }
-      };
+      NativeType nativeType = environment.findType(nominal.name()).orElse(null);
+      if (nativeType != null) {
+        return "L" + nativeType.internalName() + ";";
+      }
+      ObjectTypeInfo info = objectInfosByName.get(nominal.name());
+      if (info == null) {
+        throw new IllegalStateException("No class for type " + nominal.name());
+      }
+      return "L" + baseNames.get(info) + ";";
     }
     if (type instanceof Type.Nullable nullable) {
       Type inner = nullable.inner();
@@ -1151,15 +1138,17 @@ public final class CodeGenerator {
     private final MethodVisitor method;
     private final String returnDescriptor;
     private final Type declaredReturnType;
+    private final int envSlot;
     private final Map<VariableSymbol, Integer> slots = new IdentityHashMap<>();
     private final Deque<LoopLabels> loops = new ArrayDeque<>();
     private int nextSlot;
 
     private MethodContext(
-        MethodVisitor method, String returnDescriptor, Type declaredReturnType) {
+        MethodVisitor method, String returnDescriptor, Type declaredReturnType, int envSlot) {
       this.method = method;
       this.returnDescriptor = returnDescriptor;
       this.declaredReturnType = declaredReturnType;
+      this.envSlot = envSlot;
     }
 
     private int allocate(Type type) {

@@ -3,6 +3,17 @@ package cc.kilonode.typejava.runtime;
 public final class Values {
   private Values() {}
 
+  public static String format(Object... values) {
+    StringBuilder line = new StringBuilder();
+    for (int i = 0; i < values.length; i++) {
+      if (i > 0) {
+        line.append(' ');
+      }
+      line.append(toDisplayString(values[i]));
+    }
+    return line.toString();
+  }
+
   public static String toDisplayString(Object value) {
     if (value == null) {
       return "null";

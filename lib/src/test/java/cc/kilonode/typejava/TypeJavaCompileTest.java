@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import cc.kilonode.typejava.checker.CheckException;
+import cc.kilonode.typejava.testing.TestFixtures;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -15,11 +16,12 @@ class TypeJavaCompileTest {
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
     PrintStream out = new PrintStream(bytes, true, StandardCharsets.UTF_8);
 
-    CompiledProgram program = TypeJava.compile("console.log(\"hello\");");
+    CompiledProgram program =
+        TypeJava.compile("console.log(\"hello\");", TestFixtures.environment(out));
     assertEquals("", bytes.toString(StandardCharsets.UTF_8));
 
-    program.run(out);
-    program.run(out);
+    program.run();
+    program.run();
     assertEquals(
         ("hello" + System.lineSeparator()).repeat(2),
         bytes.toString(StandardCharsets.UTF_8));
@@ -27,6 +29,8 @@ class TypeJavaCompileTest {
 
   @Test
   void reportsCompileErrorsBeforeRunning() {
-    assertThrows(CheckException.class, () -> TypeJava.compile("console.log(missing);"));
+    assertThrows(
+        CheckException.class,
+        () -> TypeJava.compile("console.log(missing);", TestFixtures.environment()));
   }
 }

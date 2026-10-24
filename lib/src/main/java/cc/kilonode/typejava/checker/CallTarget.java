@@ -1,13 +1,10 @@
 package cc.kilonode.typejava.checker;
 
+import cc.kilonode.typejava.NativeMethod;
+import cc.kilonode.typejava.NativeType;
 import java.util.List;
 
 public sealed interface CallTarget {
-  enum Builtin {
-    ARRAY,
-    MAP
-  }
-
   record StaticFunction(FunctionSymbol symbol) implements CallTarget {}
 
   record ObjectMethod(
@@ -20,13 +17,7 @@ public sealed interface CallTarget {
 
   record ConsoleLog() implements CallTarget {}
 
-  record BuiltinCreate(Builtin builtin, Type type) implements CallTarget {}
-
-  record BuiltinMethod(
-      Builtin builtin, String name, Type receiverType, Type returnType, List<Type> parameterTypes)
-      implements CallTarget {
-    public BuiltinMethod {
-      parameterTypes = List.copyOf(parameterTypes);
-    }
-  }
+  record NativeCall(
+      NativeType type, NativeMethod method, Type receiverType, Type returnType)
+      implements CallTarget {}
 }

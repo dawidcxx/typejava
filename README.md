@@ -104,17 +104,29 @@ java -jar typejava-0.2.0-all.jar script.tj
 ### Java API
 
 ```java
-TypeJava.run(source, System.out);
+Environment environment = TypeJava.environment()
+    .io(new Io() {
+      @Override
+      public void println(String line) {
+        System.err.println("[tj] " + line);
+      }
+    })
+    .withStd()
+    .build();
 
-CompiledProgram program = TypeJava.compile(source);
-program.run(System.out);
-program.run(System.out);
+TypeJava.run(source, environment);
+
+CompiledProgram program = TypeJava.compile(source, environment);
+program.run();
+program.run();
 ```
 
-`console.log` writes to the supplied stream. `TypeJava.compile` parses, checks, and generates
-bytecode once; `CompiledProgram.run` executes that bytecode without recompiling. Use it when
-running the same script repeatedly. Compiled programs are reusable but not thread-safe. Runtime
-exceptions from the generated program are allowed to escape unchanged.
+`Io` controls console output; when no implementation is supplied the environment uses
+`DefaultIo`, which writes to `System.out`. `withStd()` binds `TjArray` and `TjMap`; without it those
+types are unavailable. `TypeJava.compile` parses, checks, and generates bytecode once;
+`CompiledProgram.run` executes that bytecode without recompiling. Use it when running the same
+script repeatedly. Compiled programs are reusable but not thread-safe. Runtime exceptions from the
+generated program are allowed to escape unchanged.
 
 ## Example
 

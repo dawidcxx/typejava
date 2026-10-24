@@ -1,5 +1,6 @@
 package cc.kilonode.typejava.examples;
 
+import cc.kilonode.typejava.Environment;
 import cc.kilonode.typejava.TypeJava;
 import java.io.IOException;
 import java.io.InputStream;
@@ -31,7 +32,7 @@ public final class Main {
 
       String source = new String(input.readAllBytes(), StandardCharsets.UTF_8);
       System.out.println("=== " + name + " ===");
-      TypeJava.run(source, System.out);
+      TypeJava.run(source, Environment.standard());
     } catch (IOException exception) {
       throw new UncheckedIOException(exception);
     }

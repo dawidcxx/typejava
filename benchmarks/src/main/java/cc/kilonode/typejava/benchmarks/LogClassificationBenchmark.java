@@ -1,6 +1,8 @@
 package cc.kilonode.typejava.benchmarks;
 
 import cc.kilonode.typejava.CompiledProgram;
+import cc.kilonode.typejava.Environment;
+import cc.kilonode.typejava.Io;
 import cc.kilonode.typejava.TypeJava;
 import java.io.OutputStream;
 import java.io.PrintStream;
@@ -55,9 +57,21 @@ public class LogClassificationBenchmark {
     @Setup(Level.Trial)
     public void setUp() throws Exception {
       sink = sink();
+      Environment environment =
+          TypeJava.environment()
+              .io(
+                  new Io() {
+                    @Override
+                    public void println(String line) {
+                      sink.println(line);
+                    }
+                  })
+              .withStd()
+              .build();
       CompiledProgram program =
-          TypeJava.compile(BenchmarkResources.read("/benchmarks/log-classification.tj"));
-      workload = (count, out) -> program.run(out);
+          TypeJava.compile(
+              BenchmarkResources.read("/benchmarks/log-classification.tj"), environment);
+      workload = (count, out) -> program.run();
       warm(workload, sink);
     }
 

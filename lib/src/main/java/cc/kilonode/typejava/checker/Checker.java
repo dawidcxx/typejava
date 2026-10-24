@@ -1,5 +1,8 @@
 package cc.kilonode.typejava.checker;
 
+import cc.kilonode.typejava.Environment;
+import cc.kilonode.typejava.NativeMethod;
+import cc.kilonode.typejava.NativeType;
 import cc.kilonode.typejava.ast.AssignmentExpression;
 import cc.kilonode.typejava.ast.BinaryExpression;
 import cc.kilonode.typejava.ast.BlockStatement;
@@ -48,12 +51,9 @@ import java.util.Map;
 import java.util.Set;
 
 public final class Checker {
-  private static final Set<String> BUILTIN_TYPE_NAMES =
-      Set.of("number", "string", "boolean", "void", "null", "TjArray", "TjMap");
-  private static final Set<String> BUILTIN_VALUE_NAMES = Set.of("console", "TjArray", "TjMap");
-
   private final Program program;
   private final SourceMap sourceMap;
+  private final Environment environment;
   private final Map<String, TypeAliasInfo> aliases = new LinkedHashMap<>();
   private final Map<String, ObjectTypeInfo> objectInfos = new LinkedHashMap<>();
   private final List<ObjectTypeInfo> objectTypes = new ArrayList<>();
@@ -83,9 +83,10 @@ public final class Checker {
   private Context context;
   private FlowState flow;
 
-  public Checker(Program program, SourceMap sourceMap) {
+  public Checker(Program program, SourceMap sourceMap, Environment environment) {
     this.program = program;
     this.sourceMap = sourceMap;
+    this.environment = environment;
   }
 
   public CheckedProgram check() {
@@ -133,12 +134,12 @@ public final class Checker {
 
   private void registerAliases() {
     for (TypeAliasDeclaration declaration : program.typeDeclarations()) {
-      if (BUILTIN_TYPE_NAMES.contains(declaration.name())) {
+      if (isBuiltinTypeName(declaration.name())) {
         throw error(declaration, "Cannot redeclare built-in type '" + declaration.name() + "'");
       }
       Set<String> names = new LinkedHashSet<>();
       for (String parameter : declaration.typeParameters()) {
-        if (BUILTIN_TYPE_NAMES.contains(parameter)) {
+        if (isBuiltinTypeName(parameter)) {
           throw error(declaration, "Type parameter '" + parameter + "' uses a built-in name");
         }
         if (!names.add(parameter)) {
@@ -249,7 +250,7 @@ public final class Checker {
       if (!(statement instanceof FunctionDeclaration declaration)) {
         continue;
       }
-      if (BUILTIN_VALUE_NAMES.contains(declaration.name())) {
+      if (isBuiltinValueName(declaration.name())) {
         throw error(declaration, "Cannot use built-in name '" + declaration.name() + "'");
       }
       if (functionsByName.containsKey(declaration.name())) {
@@ -262,7 +263,7 @@ public final class Checker {
         if ("this".equals(parameter.name())) {
           throw error(parameter, "Top-level functions cannot declare 'this'");
         }
-        if (BUILTIN_VALUE_NAMES.contains(parameter.name())) {
+        if (isBuiltinValueName(parameter.name())) {
           throw error(parameter, "Cannot use built-in name '" + parameter.name() + "'");
         }
         if (!parameterNames.add(parameter.name())) {
@@ -288,7 +289,7 @@ public final class Checker {
       if (!(statement instanceof VariableDeclaration declaration)) {
         continue;
       }
-      if (BUILTIN_VALUE_NAMES.contains(declaration.name())) {
+      if (isBuiltinValueName(declaration.name())) {
         throw error(declaration, "Cannot use built-in name '" + declaration.name() + "'");
       }
       if (topLevelVariablesByName.containsKey(declaration.name())) {
@@ -384,7 +385,7 @@ public final class Checker {
   }
 
   private void checkLocalVariable(VariableDeclaration declaration) {
-    if (BUILTIN_VALUE_NAMES.contains(declaration.name())) {
+    if (isBuiltinValueName(declaration.name())) {
       throw error(declaration, "Cannot use built-in name '" + declaration.name() + "'");
     }
     Type type = resolve(declaration.type(), Map.of());
@@ -700,11 +701,10 @@ public final class Checker {
       returned = function.returnType();
       flow.invalidateMembers();
     } else if (call.callee() instanceof MemberExpression member) {
-      if (isBuiltinTypeReference(member.object())
-          && ("TjArray".equals(((Identifier) member.object()).name())
-              || "TjMap".equals(((Identifier) member.object()).name()))) {
-        target = checkBuiltinCreate(call, member, expected);
-        returned = ((CallTarget.BuiltinCreate) target).type();
+      if (isBuiltinTypeReference(member.object())) {
+        CallTarget.NativeCall nativeCall = checkNativeStaticCall(call, member, expected);
+        target = nativeCall;
+        returned = nativeCall.returnType();
       } else if (isConsoleLog(member)) {
         if (!call.arguments().isEmpty()) {
           for (Expression argument : call.arguments()) {
@@ -721,7 +721,7 @@ public final class Checker {
         target = checkInstanceCall(call, member, receiverType);
         if (target instanceof CallTarget.ObjectMethod method) {
           returned = method.resolvedType().returnType();
-        } else if (target instanceof CallTarget.BuiltinMethod method) {
+        } else if (target instanceof CallTarget.NativeCall method) {
           returned = method.returnType();
         } else {
           throw new IllegalStateException("Unexpected call target");
@@ -738,36 +738,66 @@ public final class Checker {
     return returned;
   }
 
-  private CallTarget checkBuiltinCreate(CallExpression call, MemberExpression member, Type expected) {
+  private CallTarget.NativeCall checkNativeStaticCall(
+      CallExpression call, MemberExpression member, Type expected) {
     String typeName = ((Identifier) member.object()).name();
-    if (!"create".equals(member.property())) {
+    NativeType type = environment.findType(typeName).orElseThrow();
+    NativeMethod method = type.method(member.property());
+    if (method == null || !method.isStatic()) {
       throw error(member, "Unknown static method '" + member.property() + "' on " + typeName);
     }
-    if (!call.arguments().isEmpty()) {
-      throw error(call, typeName + ".create() does not take arguments");
+
+    Map<String, Type> substitutions = new LinkedHashMap<>();
+    if (method.isFactory()) {
+      if (!call.arguments().isEmpty()) {
+        throw error(call, typeName + "." + method.name() + "() does not take arguments");
+      }
+      Type inferred = expected == null ? null : Types.stripNullable(expected);
+      if (!(inferred instanceof Type.Nominal nominal) || !nominal.name().equals(typeName)) {
+        throw error(
+            call,
+            "Cannot infer the type of "
+                + typeName
+                + "."
+                + method.name()
+                + "(); annotate the destination as "
+                + signature(type));
+      }
+      requireArity(call, nominal, type);
+      for (int i = 0; i < type.parameterNames().size(); i++) {
+        substitutions.put(type.parameterNames().get(i), nominal.typeArguments().get(i));
+      }
     }
-    Type inferred = expected == null ? null : Types.stripNullable(expected);
-    if (!(inferred instanceof Type.Nominal nominal) || !nominal.name().equals(typeName)) {
-      throw error(
-          call,
-          "Cannot infer the type of "
-              + typeName
-              + ".create(); annotate the destination as "
-              + (typeName.equals("TjArray") ? "TjArray<T>" : "TjMap<K, V>"));
-    }
-    CallTarget.Builtin builtin =
-        typeName.equals("TjArray") ? CallTarget.Builtin.ARRAY : CallTarget.Builtin.MAP;
-    int arity = builtin == CallTarget.Builtin.ARRAY ? 1 : 2;
+
+    List<Type> parameterTypes = substituteAll(method.parameterTypes(), substitutions);
+    checkArguments(call.arguments(), parameterTypes, member);
+    Type returnType = Types.substitute(method.returnType(), substitutions);
+    return new CallTarget.NativeCall(type, method, null, returnType);
+  }
+
+  private void requireArity(Object node, Type.Nominal nominal, NativeType type) {
+    int arity = type.parameterNames().size();
     if (nominal.typeArguments().size() != arity) {
       throw error(
-          call,
-          typeName
+          node,
+          type.name()
               + " requires "
               + arity
               + " type argument"
               + (arity == 1 ? "" : "s"));
     }
-    return new CallTarget.BuiltinCreate(builtin, nominal);
+  }
+
+  private String signature(NativeType type) {
+    if (type.parameterNames().isEmpty()) {
+      return type.name();
+    }
+    return type.name() + "<" + String.join(", ", type.parameterNames()) + ">";
+  }
+
+  private static List<Type> substituteAll(
+      List<Type> types, Map<String, Type> substitutions) {
+    return types.stream().map(type -> Types.substitute(type, substitutions)).toList();
   }
 
   private CallTarget checkInstanceCall(
@@ -778,8 +808,9 @@ public final class Checker {
           "Cannot call a method on a nullable value; check for null first");
     }
     if (receiverType instanceof Type.Nominal nominal) {
-      if (nominal.name().equals("TjArray") || nominal.name().equals("TjMap")) {
-        return checkBuiltinMethod(call, member, nominal);
+      NativeType nativeType = environment.findType(nominal.name()).orElse(null);
+      if (nativeType != null) {
+        return checkNativeMethod(call, member, nominal, nativeType);
       }
       ObjectTypeInfo owner = objectInfos.get(nominal.name());
       if (owner == null) {
@@ -800,53 +831,24 @@ public final class Checker {
         "Cannot call a method on a value of type " + Types.display(receiverType));
   }
 
-  private CallTarget checkBuiltinMethod(
-      CallExpression call, MemberExpression member, Type.Nominal receiver) {
-    String type = receiver.name();
-    String method = member.property();
-    if (type.equals("TjArray")) {
-      Type element = receiver.typeArguments().get(0);
-      if ("size".equals(method)) {
-        checkArguments(call.arguments(), List.of(), member);
-        return new CallTarget.BuiltinMethod(
-            CallTarget.Builtin.ARRAY, method, receiver, Type.NUMBER, List.of());
-      }
-      if ("get".equals(method)) {
-        checkArguments(call.arguments(), List.of(Type.NUMBER), member);
-        return new CallTarget.BuiltinMethod(
-            CallTarget.Builtin.ARRAY, method, receiver, element, List.of(Type.NUMBER));
-      }
-      if ("add".equals(method)) {
-        checkArguments(call.arguments(), List.of(element), member);
-        return new CallTarget.BuiltinMethod(
-            CallTarget.Builtin.ARRAY, method, receiver, Type.VOID, List.of(element));
-      }
-      throw error(member, "Unknown method '" + method + "' on TjArray");
+  private CallTarget.NativeCall checkNativeMethod(
+      CallExpression call,
+      MemberExpression member,
+      Type.Nominal receiver,
+      NativeType type) {
+    NativeMethod method = type.method(member.property());
+    if (method == null || method.isStatic()) {
+      throw error(member, "Unknown method '" + member.property() + "' on " + type.name());
     }
 
-    Type key = receiver.typeArguments().get(0);
-    Type value = receiver.typeArguments().get(1);
-    if ("size".equals(method)) {
-      checkArguments(call.arguments(), List.of(), member);
-      return new CallTarget.BuiltinMethod(
-          CallTarget.Builtin.MAP, method, receiver, Type.NUMBER, List.of());
+    Map<String, Type> substitutions = new LinkedHashMap<>();
+    for (int i = 0; i < type.parameterNames().size(); i++) {
+      substitutions.put(type.parameterNames().get(i), receiver.typeArguments().get(i));
     }
-    if ("get".equals(method)) {
-      checkArguments(call.arguments(), List.of(key), member);
-      return new CallTarget.BuiltinMethod(
-          CallTarget.Builtin.MAP, method, receiver, value, List.of(key));
-    }
-    if ("put".equals(method)) {
-      checkArguments(call.arguments(), List.of(key, value), member);
-      return new CallTarget.BuiltinMethod(
-          CallTarget.Builtin.MAP, method, receiver, Type.VOID, List.of(key, value));
-    }
-    if ("containsKey".equals(method)) {
-      checkArguments(call.arguments(), List.of(key), member);
-      return new CallTarget.BuiltinMethod(
-          CallTarget.Builtin.MAP, method, receiver, Type.BOOLEAN, List.of(key));
-    }
-    throw error(member, "Unknown method '" + method + "' on TjMap");
+    List<Type> parameterTypes = substituteAll(method.parameterTypes(), substitutions);
+    checkArguments(call.arguments(), parameterTypes, member);
+    Type returnType = Types.substitute(method.returnType(), substitutions);
+    return new CallTarget.NativeCall(type, method, receiver, returnType);
   }
 
   private void checkArguments(List<Expression> arguments, List<Type> parameterTypes, Object node) {
@@ -969,7 +971,7 @@ public final class Checker {
       if ("this".equals(parameter.name())) {
         throw error(parameter, "'this' must be the first parameter");
       }
-      if (BUILTIN_VALUE_NAMES.contains(parameter.name())) {
+      if (isBuiltinValueName(parameter.name())) {
         throw error(parameter, "Cannot use built-in name '" + parameter.name() + "'");
       }
       if (!names.add(parameter.name())) {
@@ -1451,15 +1453,12 @@ public final class Checker {
           requireNoTypeArguments(named, arguments);
           return Type.VOID;
         }
-        case "TjArray" -> {
-          requireArity(named, arguments, 1);
-          return new Type.Nominal("TjArray", arguments);
-        }
-        case "TjMap" -> {
-          requireArity(named, arguments, 2);
-          return new Type.Nominal("TjMap", arguments);
-        }
         default -> {
+          NativeType nativeType = environment.findType(named.name()).orElse(null);
+          if (nativeType != null) {
+            requireArity(named, arguments, nativeType.parameterNames().size());
+            return new Type.Nominal(named.name(), arguments);
+          }
           return resolveAlias(named.name(), arguments, reference);
         }
       }
@@ -1548,9 +1547,20 @@ public final class Checker {
     }
   }
 
+  private boolean isBuiltinTypeName(String name) {
+    return switch (name) {
+      case "number", "string", "boolean", "void", "null" -> true;
+      default -> environment.findType(name).isPresent();
+    };
+  }
+
+  private boolean isBuiltinValueName(String name) {
+    return "console".equals(name) || environment.findType(name).isPresent();
+  }
+
   private boolean isBuiltinTypeReference(Expression expression) {
     return expression instanceof Identifier identifier
-        && BUILTIN_VALUE_NAMES.contains(identifier.name())
+        && environment.findType(identifier.name()).isPresent()
         && findVariable(identifier.name()) == null;
   }
 

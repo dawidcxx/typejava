@@ -1,6 +1,10 @@
 package cc.kilonode.typejava.testing;
 
+import cc.kilonode.typejava.Environment;
+import cc.kilonode.typejava.Io;
+import cc.kilonode.typejava.TypeJava;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,6 +15,23 @@ public final class TestFixtures {
   private static final Path ROOT = Path.of("src/test/resources/fixtures");
 
   private TestFixtures() {}
+
+  public static Environment environment() {
+    return Environment.standard();
+  }
+
+  public static Environment environment(PrintStream out) {
+    return TypeJava.environment()
+        .io(
+            new Io() {
+              @Override
+              public void println(String line) {
+                out.println(line);
+              }
+            })
+        .withStd()
+        .build();
+  }
 
   public static Path root() {
     return ROOT;
