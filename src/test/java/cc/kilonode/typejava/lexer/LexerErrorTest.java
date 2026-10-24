@@ -52,13 +52,4 @@ class LexerErrorTest {
     assertEquals(1, error.getLine());
     assertTrue(error.getMessage().contains("&"));
   }
-
-  @Test
-  void rejectsSinglePipe() {
-    LexerException error =
-        assertThrows(LexerException.class, () -> new Lexer("true | false").tokenize());
-
-    assertEquals(1, error.getLine());
-    assertTrue(error.getMessage().contains("|"));
-  }
 }

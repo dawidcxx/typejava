@@ -17,6 +17,8 @@ import cc.kilonode.typejava.ast.LValue;
 import cc.kilonode.typejava.ast.MemberExpression;
 import cc.kilonode.typejava.ast.MethodSignature;
 import cc.kilonode.typejava.ast.NamedType;
+import cc.kilonode.typejava.ast.NullLiteral;
+import cc.kilonode.typejava.ast.NullType;
 import cc.kilonode.typejava.ast.NumericLiteral;
 import cc.kilonode.typejava.ast.ObjectField;
 import cc.kilonode.typejava.ast.ObjectLiteral;
@@ -33,6 +35,7 @@ import cc.kilonode.typejava.ast.TypeField;
 import cc.kilonode.typejava.ast.TypeMember;
 import cc.kilonode.typejava.ast.TypeReference;
 import cc.kilonode.typejava.ast.UnaryExpression;
+import cc.kilonode.typejava.ast.UnionType;
 import cc.kilonode.typejava.ast.VariableDeclaration;
 import cc.kilonode.typejava.ast.VariableKind;
 import cc.kilonode.typejava.ast.WhileStatement;
@@ -80,12 +83,28 @@ public final class Parser {
     Token start = peek();
     consume(TokenType.TYPE, "Expected 'type'");
     Token name = consume(TokenType.IDENTIFIER, "Expected type name after 'type'");
+    List<String> typeParameters = typeParameters();
     consume(TokenType.ASSIGN, "Expected '=' after type name");
     TypeReference type = type();
     consume(
         TokenType.SEMICOLON,
         "Expected ';' after type declaration (maybe you forgot a semicolon)");
-    return located(new TypeAliasDeclaration(name.lexeme(), type), start);
+    return located(new TypeAliasDeclaration(name.lexeme(), typeParameters, type), start);
+  }
+
+  private List<String> typeParameters() {
+    if (!match(TokenType.LT)) {
+      return List.of();
+    }
+
+    List<String> typeParameters = new ArrayList<>();
+    do {
+      Token parameter = consume(TokenType.IDENTIFIER, "Expected type parameter name");
+      typeParameters.add(parameter.lexeme());
+    } while (match(TokenType.COMMA));
+    consumeTypeClose("Expected '>' after type parameters");
+
+    return typeParameters;
   }
 
   private Statement statement() {
@@ -218,15 +237,54 @@ public final class Parser {
   }
 
   private TypeReference type() {
+    Token start = peek();
+    TypeReference first = typeAtom();
+
+    if (!match(TokenType.PIPE)) {
+      return first;
+    }
+
+    List<TypeReference> members = new ArrayList<>();
+    members.add(first);
+    do {
+      members.add(typeAtom());
+    } while (match(TokenType.PIPE));
+
+    return located(new UnionType(members), start);
+  }
+
+  private TypeReference typeAtom() {
     if (check(TokenType.IDENTIFIER)) {
       Token start = advance();
-      return located(new NamedType(start.lexeme()), start);
+      return located(new NamedType(start.lexeme(), typeArguments()), start);
+    }
+    if (check(TokenType.NULL)) {
+      Token start = advance();
+      return located(new NullType(), start);
     }
     if (check(TokenType.LBRACE)) {
       Token start = advance();
       return located(objectType(), start);
     }
-    throw error(peek(), "Expected a type name or object type");
+    throw error(peek(), "Expected a type name, object type, or null");
+  }
+
+  private List<TypeReference> typeArguments() {
+    if (!match(TokenType.LT)) {
+      return List.of();
+    }
+
+    if (check(TokenType.GT)) {
+      throw error(peek(), "Expected a type argument");
+    }
+
+    List<TypeReference> arguments = new ArrayList<>();
+    do {
+      arguments.add(type());
+    } while (match(TokenType.COMMA));
+    consumeTypeClose("Expected '>' after type arguments");
+
+    return arguments;
   }
 
   private ObjectType objectType() {
@@ -465,6 +523,10 @@ public final class Parser {
       Token token = advance();
       return located(new BooleanLiteral(false), token);
     }
+    if (check(TokenType.NULL)) {
+      Token token = advance();
+      return located(new NullLiteral(), token);
+    }
     if (check(TokenType.LPAREN)) {
       Token start = advance();
       Expression expression = expression();
@@ -543,6 +605,22 @@ public final class Parser {
   private Token consume(TokenType type, String message) {
     if (check(type)) {
       return advance();
+    }
+    throw error(peek(), message);
+  }
+
+  private Token consumeTypeClose(String message) {
+    if (check(TokenType.GT)) {
+      return advance();
+    }
+    if (check(TokenType.GTE)) {
+      Token combined = advance();
+      Token close = new Token(TokenType.GT, ">", null, combined.line(), combined.column());
+      Token assign =
+          new Token(TokenType.ASSIGN, "=", null, combined.line(), combined.column() + 1);
+      tokens.set(current - 1, close);
+      tokens.add(current, assign);
+      return close;
     }
     throw error(peek(), message);
   }

@@ -39,7 +39,7 @@ class ParserTypeDeclarationErrorTest {
         assertThrows(ParseException.class, () -> parse("type Foo = { a: ; };"));
 
     assertEquals(1, error.getLine());
-    assertTrue(error.getMessage().contains("type name or object type"));
+    assertTrue(error.getMessage().contains("type name"));
   }
 
   @Test

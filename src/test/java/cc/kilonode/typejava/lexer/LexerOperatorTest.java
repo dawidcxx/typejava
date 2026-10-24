@@ -50,4 +50,34 @@ class LexerOperatorTest {
             TokenType.EOF),
         tokens.stream().map(Token::type).toList());
   }
+
+  @Test
+  void tokenizesUnionPipe() {
+    List<Token> tokens = new Lexer("A | B").tokenize();
+
+    assertEquals(
+        List.of(
+            TokenType.IDENTIFIER,
+            TokenType.PIPE,
+            TokenType.IDENTIFIER,
+            TokenType.EOF),
+        tokens.stream().map(Token::type).toList());
+  }
+
+  @Test
+  void tokenizesNestedGenericBrackets() {
+    List<Token> tokens = new Lexer("Box<TjArray<number>>").tokenize();
+
+    assertEquals(
+        List.of(
+            TokenType.IDENTIFIER,
+            TokenType.LT,
+            TokenType.IDENTIFIER,
+            TokenType.LT,
+            TokenType.IDENTIFIER,
+            TokenType.GT,
+            TokenType.GT,
+            TokenType.EOF),
+        tokens.stream().map(Token::type).toList());
+  }
 }

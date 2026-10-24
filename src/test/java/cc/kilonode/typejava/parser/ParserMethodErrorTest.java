@@ -14,7 +14,7 @@ class ParserMethodErrorTest {
         assertThrows(ParseException.class, () -> parse("type X = { f(this: X): ; };"));
 
     assertEquals(1, error.getLine());
-    assertTrue(error.getMessage().contains("type name or object type"));
+    assertTrue(error.getMessage().contains("type name"));
   }
 
   @Test

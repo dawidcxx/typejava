@@ -48,6 +48,7 @@ public final class Lexer {
               case "continue" -> TokenType.CONTINUE;
               case "true" -> TokenType.TRUE;
               case "false" -> TokenType.FALSE;
+              case "null" -> TokenType.NULL;
               default -> TokenType.IDENTIFIER;
             };
         tokens.add(new Token(type, text, null, tokenLine, tokenColumn));
@@ -126,10 +127,8 @@ public final class Lexer {
         }
         case '|' -> {
           advance();
-          if (!match('|')) {
-            throw new LexerException("Unexpected character '|'", tokenLine, tokenColumn);
-          }
-          tokens.add(new Token(TokenType.OROR, "||", null, tokenLine, tokenColumn));
+          TokenType type = match('|') ? TokenType.OROR : TokenType.PIPE;
+          tokens.add(new Token(type, source.substring(start, index), null, tokenLine, tokenColumn));
         }
         case '(' -> {
           advance();

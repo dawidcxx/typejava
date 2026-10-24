@@ -1,0 +1,22 @@
+type Person = {
+  name: string;
+  age: number | null;
+};
+
+type PersonOrNull = Person | null;
+
+function ageOf(person: PersonOrNull): number | null {
+  if (person == null) {
+    return null;
+  }
+
+  return person.age;
+};
+
+const alice: Person = {
+  name: "Alice",
+  age: 30
+};
+
+console.log(ageOf(alice));
+console.log(ageOf(null));

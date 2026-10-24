@@ -1,0 +1,17 @@
+type Box<T> = {
+  value: T;
+};
+
+type Registry<T> = TjMap<string, TjArray<T>>;
+
+type UpstreamLog = {
+  readonly service: string;
+};
+
+const boxed: Box<UpstreamLog> = {
+  value: { service: "billing" }
+};
+
+const registry: Registry<UpstreamLog> = TjMap.create();
+
+console.log(boxed.value.service);

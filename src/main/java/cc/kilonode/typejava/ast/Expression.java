@@ -8,6 +8,7 @@ public sealed interface Expression
         FunctionExpression,
         Identifier,
         MemberExpression,
+        NullLiteral,
         NumericLiteral,
         ObjectLiteral,
         StringLiteral,

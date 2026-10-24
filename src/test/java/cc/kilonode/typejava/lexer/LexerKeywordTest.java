@@ -10,7 +10,7 @@ class LexerKeywordTest {
   void recognizesKeywords() {
     List<Token> tokens =
         new Lexer(
-                "function return type let const readonly if else while break continue true false")
+                "function return type let const readonly if else while break continue true false null")
             .tokenize();
 
     assertEquals(
@@ -28,6 +28,7 @@ class LexerKeywordTest {
             TokenType.CONTINUE,
             TokenType.TRUE,
             TokenType.FALSE,
+            TokenType.NULL,
             TokenType.EOF),
         tokens.stream().map(Token::type).toList());
   }

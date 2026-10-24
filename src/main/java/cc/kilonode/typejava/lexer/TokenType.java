@@ -17,6 +17,7 @@ public enum TokenType {
   CONTINUE,
   TRUE,
   FALSE,
+  NULL,
   DOT,
   COLON,
   COMMA,
@@ -38,6 +39,7 @@ public enum TokenType {
   GTE,
   ANDAND,
   OROR,
+  PIPE,
   BANG,
   SEMICOLON,
   EOF
