@@ -95,9 +95,9 @@ types, and TypeScript declaration generation for Monaco and other editors.
 
 ## Performance
 
-On the included log-classification benchmark, TypeJava is about 1.2x plain Java and faster than
-Groovy, Rhino, and BeanShell on the same workload. See [benchmarks](benchmarks/README.md) for the
-current numbers and methodology.
+On the included log-classification benchmark, TypeJava takes about 1.2x as long as plain Java
+(roughly 19% slower) and is still faster than Groovy, Rhino, and BeanShell on the same workload. See
+[benchmarks](benchmarks/README.md) for the current numbers and methodology.
 
 ## Project docs
 
