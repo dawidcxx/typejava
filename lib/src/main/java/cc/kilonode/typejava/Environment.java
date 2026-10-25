@@ -2,8 +2,11 @@ package cc.kilonode.typejava;
 
 import cc.kilonode.typejava.runtime.TjArray;
 import cc.kilonode.typejava.runtime.TjMap;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -15,10 +18,18 @@ public final class Environment {
 
   private final Io io;
   private final Map<String, NativeType> types;
+  private final Map<String, RecordType> records;
+  private final List<Class<?>> exportInterfaces;
 
-  private Environment(Io io, Map<String, NativeType> types) {
+  private Environment(
+      Io io,
+      Map<String, NativeType> types,
+      Map<String, RecordType> records,
+      List<Class<?>> exportInterfaces) {
     this.io = io;
     this.types = types;
+    this.records = records;
+    this.exportInterfaces = exportInterfaces;
   }
 
   public static Builder builder() {
@@ -41,8 +52,22 @@ public final class Environment {
     return types.values();
   }
 
+  public Optional<RecordType> findRecord(String name) {
+    return Optional.ofNullable(records.get(name));
+  }
+
+  public Collection<RecordType> records() {
+    return records.values();
+  }
+
+  public List<Class<?>> exportInterfaces() {
+    return exportInterfaces;
+  }
+
   public static final class Builder {
     private final Map<String, NativeType> types = new LinkedHashMap<>();
+    private final Map<String, Class<?>> recordClasses = new LinkedHashMap<>();
+    private final List<Class<?>> exportInterfaces = new ArrayList<>();
     private Io io;
 
     public Builder io(Io io) {
@@ -77,8 +102,64 @@ public final class Environment {
       return this;
     }
 
+    public Builder record(Class<?> recordClass) {
+      Objects.requireNonNull(recordClass, "recordClass");
+      if (!recordClass.isRecord()) {
+        throw new IllegalArgumentException(
+            "Bound type " + recordClass.getName() + " is not a record");
+      }
+      String name = recordClass.getSimpleName();
+      if (RESERVED_NAMES.contains(name)) {
+        throw new IllegalArgumentException(
+            "Cannot bind record '" + recordClass.getName() + "': name is reserved");
+      }
+      if (types.containsKey(name)) {
+        throw new IllegalArgumentException(
+            "Record '" + name + "' conflicts with a native type of the same name");
+      }
+      Class<?> existing = recordClasses.putIfAbsent(name, recordClass);
+      if (existing != null && existing != recordClass) {
+        throw new IllegalArgumentException(
+            "Record '" + name + "' is already bound to " + existing.getName());
+      }
+      return this;
+    }
+
+    public Builder exports(Class<?>... interfaces) {
+      Objects.requireNonNull(interfaces, "interfaces");
+      for (Class<?> api : interfaces) {
+        Objects.requireNonNull(api, "export interface");
+        if (!api.isInterface()) {
+          throw new IllegalArgumentException(
+              "Export contract " + api.getName() + " is not an interface");
+        }
+        if (!Modifier.isPublic(api.getModifiers())) {
+          throw new IllegalArgumentException(
+              "Export contract " + api.getName() + " must be public");
+        }
+        if (!exportInterfaces.contains(api)) {
+          exportInterfaces.add(api);
+        }
+      }
+      return this;
+    }
+
     public Environment build() {
-      return new Environment(io == null ? new DefaultIo() : io, Map.copyOf(types));
+      Map<String, RecordType> records = new LinkedHashMap<>();
+      Map<String, Class<?>> immutableRecords = Map.copyOf(recordClasses);
+      for (Class<?> recordClass : recordClasses.values()) {
+        String name = recordClass.getSimpleName();
+        if (types.containsKey(name)) {
+          throw new IllegalArgumentException(
+              "Record '" + name + "' conflicts with a native type of the same name");
+        }
+        records.put(name, RecordType.create(recordClass, immutableRecords));
+      }
+      return new Environment(
+          io == null ? new DefaultIo() : io,
+          Map.copyOf(types),
+          Map.copyOf(records),
+          List.copyOf(exportInterfaces));
     }
   }
 

@@ -7,9 +7,13 @@ import cc.kilonode.typejava.lexer.Lexer;
 import cc.kilonode.typejava.parser.ParseResult;
 import cc.kilonode.typejava.parser.Parser;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -65,8 +69,29 @@ public final class TypeJava {
         new GeneratedClassLoader(TypeJava.class.getClassLoader(), classes);
     try {
       Class<?> programClass = loader.loadClass(generator.mainClassName());
+      Constructor<?> constructor = programClass.getConstructor();
       Method run = programClass.getMethod("run", Environment.class);
-      return new CompiledProgram(run, environment);
+      Map<String, ExportedFunction> exports = new LinkedHashMap<>();
+      for (Method method : programClass.getDeclaredMethods()) {
+        if (!method.getName().startsWith("export$")) {
+          continue;
+        }
+        String name = method.getName().substring("export$".length());
+        Class<?>[] parameterTypes = method.getParameterTypes();
+        if (parameterTypes.length == 0
+            || !parameterTypes[0].equals(Environment.class)) {
+          throw new IllegalStateException(
+              "Generated export '" + name + "' does not take an Environment");
+        }
+        List<Class<?>> hostParameters = new ArrayList<>();
+        for (int i = 1; i < parameterTypes.length; i++) {
+          hostParameters.add(parameterTypes[i]);
+        }
+        ExportSignature signature =
+            new ExportSignature(name, hostParameters, method.getReturnType());
+        exports.put(name, new ExportedFunction(name, method, signature));
+      }
+      return new CompiledProgram(constructor, run, environment, exports);
     } catch (ReflectiveOperationException exception) {
       throw new IllegalStateException("Could not load generated TypeJava program", exception);
     }

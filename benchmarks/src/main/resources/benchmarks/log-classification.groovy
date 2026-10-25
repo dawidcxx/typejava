@@ -1,5 +1,3 @@
-import java.io.PrintStream
-
 String severityOf(Integer level) {
   if (level == null) {
     return 'unknown'
@@ -114,7 +112,7 @@ Map classify(Map log) {
   [service: log.service, severity: severity, action: action, priority: priority]
 }
 
-String runWorkload(int count, PrintStream out) {
+String runWorkload(int count) {
   def logs = new ArrayList(count)
 
   for (int i = 0; i < count; i++) {
@@ -141,8 +139,6 @@ String runWorkload(int count, PrintStream out) {
   }
 
   int warnings = severityCounts['warning'] ?: 0
-  String summary = "logs=${logs.size()} critical=$critical warnings=$warnings page=$pageable " +
+  "logs=${logs.size()} critical=$critical warnings=$warnings page=$pageable " +
       "severities=${severityCounts.size()} actions=${actionCounts.size()}"
-  out.println(summary)
-  summary
 }

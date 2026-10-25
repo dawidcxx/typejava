@@ -170,7 +170,7 @@ function increment(counts: TjMap<string, number>, key: string): void {
   }
 };
 
-function runWorkload(count: number): string {
+export function runWorkload(count: number): string {
   const logs: TjArray<UpstreamLog> = buildLogs(count);
   const severityCounts: TjMap<string, number> = TjMap.create();
   const actionCounts: TjMap<string, number> = TjMap.create();
@@ -208,5 +208,3 @@ function runWorkload(count: number): string {
     + " severities=" + severityCounts.size()
     + " actions=" + actionCounts.size();
 };
-
-console.log(runWorkload(10000));

@@ -4,6 +4,7 @@ public enum TokenType {
   IDENTIFIER,
   NUMBER,
   STRING,
+  EXPORT,
   FUNCTION,
   RETURN,
   TYPE,

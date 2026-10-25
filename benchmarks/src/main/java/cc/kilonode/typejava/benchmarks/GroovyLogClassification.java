@@ -2,7 +2,6 @@ package cc.kilonode.typejava.benchmarks;
 
 import groovy.lang.GroovyShell;
 import groovy.lang.Script;
-import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
@@ -14,10 +13,10 @@ final class GroovyLogClassification {
     Script script = shell.parse(source, "LogClassification.groovy");
 
     try {
-      Method method = script.getClass().getMethod("runWorkload", int.class, PrintStream.class);
-      return (count, out) -> {
+      Method method = script.getClass().getMethod("runWorkload", int.class);
+      return count -> {
         try {
-          method.invoke(script, count, out);
+          return (String) method.invoke(script, count);
         } catch (InvocationTargetException exception) {
           Throwable cause = exception.getCause();
           if (cause instanceof Exception checked) {

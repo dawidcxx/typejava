@@ -1,8 +1,10 @@
 package cc.kilonode.typejava.checker;
 
 import cc.kilonode.typejava.Environment;
+import cc.kilonode.typejava.HostTypes;
 import cc.kilonode.typejava.NativeMethod;
 import cc.kilonode.typejava.NativeType;
+import cc.kilonode.typejava.RecordType;
 import cc.kilonode.typejava.ast.AssignmentExpression;
 import cc.kilonode.typejava.ast.BinaryExpression;
 import cc.kilonode.typejava.ast.BlockStatement;
@@ -114,6 +116,7 @@ public final class Checker {
     }
 
     scopes.pop();
+    validateExportInterfaces();
     return new CheckedProgram(
         program,
         sourceMap,
@@ -279,8 +282,101 @@ public final class Checker {
 
       FunctionSymbol symbol =
           new FunctionSymbol(declaration.name(), parameterTypes, returnType, declaration);
+      if (declaration.exported()) {
+        validateExportedFunction(symbol);
+      }
       functions.add(symbol);
       functionsByName.put(symbol.name(), symbol);
+    }
+  }
+
+  private void validateExportedFunction(FunctionSymbol symbol) {
+    for (int i = 0; i < symbol.parameterTypes().size(); i++) {
+      Type type = symbol.parameterTypes().get(i);
+      if (!HostTypes.isHostBound(type, environment)) {
+        throw error(
+            symbol.declaration().parameters().get(i),
+            "Exported parameter '"
+                + symbol.declaration().parameters().get(i).name()
+                + "' has type "
+                + Types.display(type)
+                + ", which cannot cross an export boundary; bind a record or use a native type");
+      }
+    }
+    Type returnType = symbol.returnType();
+    if (!Types.isVoid(returnType) && !HostTypes.isHostBound(returnType, environment)) {
+      throw error(
+          symbol.declaration().returnType(),
+          "Exported return type "
+              + Types.display(returnType)
+              + " cannot cross an export boundary; bind a record or use a native type");
+    }
+  }
+
+  private void validateExportInterfaces() {
+    for (Class<?> api : environment.exportInterfaces()) {
+      for (java.lang.reflect.Method method : api.getMethods()) {
+        if (method.getDeclaringClass() == Object.class
+            || java.lang.reflect.Modifier.isStatic(method.getModifiers())
+            || method.isDefault()) {
+          continue;
+        }
+        FunctionSymbol symbol = functionsByName.get(method.getName());
+        if (symbol == null || !symbol.declaration().exported()) {
+          throw error(
+              program,
+              "Export contract "
+                  + api.getName()
+                  + "."
+                  + method.getName()
+                  + " has no matching exported function");
+        }
+        Class<?>[] parameters = method.getParameterTypes();
+        if (parameters.length != symbol.parameterTypes().size()) {
+          throw error(
+              symbol.declaration(),
+              "Exported function '"
+                  + symbol.name()
+                  + "' expects "
+                  + symbol.parameterTypes().size()
+                  + " parameter(s), but "
+                  + api.getName()
+                  + "."
+                  + method.getName()
+                  + " expects "
+                  + parameters.length);
+        }
+        for (int i = 0; i < parameters.length; i++) {
+          Class<?> actual = HostTypes.hostClass(symbol.parameterTypes().get(i), environment);
+          if (!parameters[i].equals(actual)) {
+            throw error(
+                symbol.declaration().parameters().get(i),
+                "Exported parameter '"
+                    + symbol.declaration().parameters().get(i).name()
+                    + "' maps to "
+                    + actual.getName()
+                    + ", but "
+                    + api.getName()
+                    + "."
+                    + method.getName()
+                    + " expects "
+                    + parameters[i].getName());
+          }
+        }
+        Class<?> actualReturn = HostTypes.hostClass(symbol.returnType(), environment);
+        if (!method.getReturnType().equals(actualReturn)) {
+          throw error(
+              symbol.declaration().returnType(),
+              "Exported return type maps to "
+                  + actualReturn.getName()
+                  + ", but "
+                  + api.getName()
+                  + "."
+                  + method.getName()
+                  + " returns "
+                  + method.getReturnType().getName());
+        }
+      }
     }
   }
 
@@ -1303,6 +1399,12 @@ public final class Checker {
       return new Type.Nominal(name, arguments);
     }
 
+    if (environment.findRecord(name).isPresent()) {
+      throw error(
+          node,
+          "Record-bound type '" + name + "' must be declared as an object type with readonly fields");
+    }
+
     if (!resolvingAliases.add(name)) {
       throw error(node, "Type alias cycle involving '" + name + "'");
     }
@@ -1343,6 +1445,109 @@ public final class Checker {
     ObjectTypeInfo complete = new ObjectTypeInfo(alias.name, parameters, fields);
     objectInfos.put(alias.name, complete);
     objectTypes.add(complete);
+    RecordType record = environment.findRecord(alias.name).orElse(null);
+    if (record != null) {
+      validateRecordBinding(alias, complete, record);
+    }
+  }
+
+  private void ensureRecordInfo(RecordType record) {
+    if (objectInfos.containsKey(record.name())) {
+      return;
+    }
+    ObjectTypeInfo placeholder = new ObjectTypeInfo(record.name(), List.of(), List.of());
+    objectInfos.put(record.name(), placeholder);
+    List<FieldInfo> fields = new ArrayList<>();
+    for (RecordType.Field field : record.fields()) {
+      fields.add(new FieldInfo(field.name(), true, field.type()));
+    }
+    ObjectTypeInfo complete = new ObjectTypeInfo(record.name(), List.of(), fields);
+    objectInfos.put(record.name(), complete);
+    objectTypes.add(complete);
+    for (FieldInfo field : complete.fields()) {
+      if (field.type() instanceof Type.Nominal nominal) {
+        environment
+            .findRecord(nominal.name())
+            .ifPresent(this::ensureRecordInfo);
+      }
+    }
+  }
+
+  private void validateRecordBinding(
+      TypeAliasInfo alias, ObjectTypeInfo source, RecordType record) {
+    if (!alias.declaration.typeParameters().isEmpty()) {
+      throw error(
+          alias.declaration,
+          "Record-bound type '" + alias.name + "' must not declare type parameters");
+    }
+    if (source.fields().size() != record.fields().size()) {
+      throw error(
+          alias.declaration,
+          "Record-bound type '"
+              + alias.name
+              + "' has "
+              + source.fields().size()
+              + " field(s), but "
+              + record.javaClass().getName()
+              + " has "
+              + record.fields().size()
+              + " record component(s)");
+    }
+    for (RecordType.Field expected : record.fields()) {
+      FieldInfo actual = null;
+      for (FieldInfo field : source.fields()) {
+        if (field.name().equals(expected.name())) {
+          actual = field;
+          break;
+        }
+      }
+      if (actual == null) {
+        throw error(
+            alias.declaration,
+            "Record-bound type '"
+                + alias.name
+                + "' is missing field '"
+                + expected.name()
+                + "' from "
+                + record.javaClass().getName());
+      }
+      if (!actual.readonly()) {
+        throw error(
+            alias.declaration,
+            "Record-bound field '"
+                + alias.name
+                + "."
+                + actual.name()
+                + "' must be readonly");
+      }
+      if (!actual.type().equals(expected.type())) {
+        throw error(
+            alias.declaration,
+            "Record-bound field '"
+                + alias.name
+                + "."
+                + actual.name()
+                + "' has type "
+                + Types.display(actual.type())
+                + ", but "
+                + record.javaClass().getName()
+                + " maps it to "
+                + Types.display(expected.type()));
+      }
+    }
+    for (FieldInfo actual : source.fields()) {
+      if (record.field(actual.name()) == null) {
+        throw error(
+            alias.declaration,
+            "Record-bound type '"
+                + alias.name
+                + "' declares field '"
+                + actual.name()
+                + "', but "
+                + record.javaClass().getName()
+                + " has no matching record component");
+      }
+    }
   }
 
   private Type.Nominal inlineObjectInfo(ObjectType type, Map<String, Type> scope) {
@@ -1458,6 +1663,15 @@ public final class Checker {
           if (nativeType != null) {
             requireArity(named, arguments, nativeType.parameterNames().size());
             return new Type.Nominal(named.name(), arguments);
+          }
+          if (aliases.containsKey(named.name())) {
+            return resolveAlias(named.name(), arguments, reference);
+          }
+          RecordType record = environment.findRecord(named.name()).orElse(null);
+          if (record != null) {
+            requireNoTypeArguments(named, arguments);
+            ensureRecordInfo(record);
+            return new Type.Nominal(record.name(), List.of());
           }
           return resolveAlias(named.name(), arguments, reference);
         }

@@ -5,6 +5,7 @@ import static org.objectweb.asm.Opcodes.*;
 import cc.kilonode.typejava.Environment;
 import cc.kilonode.typejava.NativeMethod;
 import cc.kilonode.typejava.NativeType;
+import cc.kilonode.typejava.RecordType;
 import cc.kilonode.typejava.ast.AssignmentExpression;
 import cc.kilonode.typejava.ast.BinaryExpression;
 import cc.kilonode.typejava.ast.BlockStatement;
@@ -60,6 +61,7 @@ public final class CodeGenerator {
   private static final String ENV_DESCRIPTOR = "L" + ENVIRONMENT + ";";
   private static final String CONSOLE = RUNTIME + "Console";
   private static final String VALUES = RUNTIME + "Values";
+  private static final String BOUNDARY = RUNTIME + "Boundary";
   private static final AtomicLong RUN_IDS = new AtomicLong();
 
   private final CheckedProgram checked;
@@ -74,6 +76,7 @@ public final class CodeGenerator {
   private final Map<VariableSymbol, String> topLevelFieldNames = new IdentityHashMap<>();
   private final Map<FunctionSymbol, String> functionNames = new IdentityHashMap<>();
   private final Map<ObjectLiteralInfo, String> literalNames = new IdentityHashMap<>();
+  private final Map<String, String> recordValidatorNames = new HashMap<>();
   private int literalCounter;
 
   public CodeGenerator(CheckedProgram checked, Environment environment) {
@@ -103,13 +106,19 @@ public final class CodeGenerator {
     }
     int functionIndex = 0;
     for (FunctionSymbol function : checked.functions) {
-      functionNames.put(function, "fn$" + functionIndex++);
+      if (function.declaration().exported()) {
+        functionNames.put(function, "export$" + function.name());
+      } else {
+        functionNames.put(function, "fn$" + functionIndex++);
+      }
     }
   }
 
   public Map<String, byte[]> generate() {
     for (ObjectTypeInfo info : checked.objectTypes) {
-      generateBaseClass(info);
+      if (environment.findRecord(info.name()).isEmpty()) {
+        generateBaseClass(info);
+      }
     }
     generateMainClass();
     return Map.copyOf(classes);
@@ -177,10 +186,19 @@ public final class CodeGenerator {
     ClassWriter writer = writer();
     writer.visit(V1_5, ACC_PUBLIC | ACC_FINAL | ACC_SUPER, mainInternal, null, "java/lang/Object", null);
 
+    MethodVisitor constructor = writer.visitMethod(ACC_PUBLIC, "<init>", "()V", null, null);
+    constructor.visitCode();
+    constructor.visitVarInsn(ALOAD, 0);
+    constructor.visitMethodInsn(
+        INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+    constructor.visitInsn(RETURN);
+    constructor.visitMaxs(0, 0);
+    constructor.visitEnd();
+
     for (VariableSymbol variable : checked.topLevelVariables) {
       writer
           .visitField(
-              ACC_STATIC,
+              ACC_PUBLIC,
               topLevelFieldNames.get(variable),
               descriptor(variable.type()),
               null,
@@ -189,15 +207,15 @@ public final class CodeGenerator {
     }
 
     for (FunctionSymbol function : checked.functions) {
-      generateStaticFunction(writer, function);
+      generateFunction(writer, function);
     }
 
     MethodVisitor run =
         writer.visitMethod(
-            ACC_PUBLIC | ACC_STATIC, "run", "(" + ENV_DESCRIPTOR + ")V", null, null);
+            ACC_PUBLIC, "run", "(" + ENV_DESCRIPTOR + ")V", null, null);
     run.visitCode();
-    MethodContext context = new MethodContext(run, "V", null, 0);
-    context.nextSlot = 1;
+    MethodContext context = new MethodContext(run, "V", null, 1, -1, true);
+    context.nextSlot = 2;
     for (Statement statement : checked.program.statements()) {
       if (statement instanceof FunctionDeclaration) {
         continue;
@@ -208,20 +226,22 @@ public final class CodeGenerator {
     run.visitMaxs(0, 0);
     run.visitEnd();
 
+    generateRecordValidators(writer);
+
     writer.visitEnd();
     classes.put(mainInternal, writer.toByteArray());
   }
 
-  private void generateStaticFunction(ClassWriter writer, FunctionSymbol function) {
+  private void generateFunction(ClassWriter writer, FunctionSymbol function) {
     FunctionDeclaration declaration = function.declaration();
     String descriptor = functionDescriptor(function);
     MethodVisitor method =
         writer.visitMethod(
-            ACC_PUBLIC | ACC_STATIC, functionNames.get(function), descriptor, null, null);
+            ACC_PUBLIC, functionNames.get(function), descriptor, null, null);
     method.visitCode();
     MethodContext context =
-        new MethodContext(method, descriptor(function.returnType()), function.returnType(), 0);
-    int slot = 1;
+        new MethodContext(method, descriptor(function.returnType()), function.returnType(), 1, -1, true);
+    int slot = 2;
     for (int i = 0; i < declaration.parameters().size(); i++) {
       Parameter parameter = declaration.parameters().get(i);
       VariableSymbol symbol = checked.parameterSymbols.get(parameter);
@@ -229,12 +249,185 @@ public final class CodeGenerator {
       slot += slotSize(descriptor(function.parameterTypes().get(i)));
     }
     context.nextSlot = slot;
+    if (declaration.exported()) {
+      emitExportParameterChecks(function, context);
+    }
     compileBlockStatements(declaration.body(), context);
     if (Types.isVoid(function.returnType())) {
       method.visitInsn(RETURN);
     }
     method.visitMaxs(0, 0);
     method.visitEnd();
+  }
+
+  private void emitExportParameterChecks(FunctionSymbol function, MethodContext context) {
+    FunctionDeclaration declaration = function.declaration();
+    for (int i = 0; i < declaration.parameters().size(); i++) {
+      Type type = function.parameterTypes().get(i);
+      VariableSymbol symbol = checked.parameterSymbols.get(declaration.parameters().get(i));
+      int slot = context.slots.get(symbol);
+      String path =
+          "parameter '"
+              + declaration.parameters().get(i).name()
+              + "' of "
+              + function.name();
+      if (type instanceof Type.Nullable nullable) {
+        Type.Nominal recordName = recordNominal(nullable.inner());
+        if (recordName != null) {
+          Label skip = new Label();
+          context.method.visitVarInsn(ALOAD, slot);
+          context.method.visitJumpInsn(IFNULL, skip);
+          context.method.visitVarInsn(ALOAD, slot);
+          context.method.visitLdcInsn(path);
+          context.method.visitMethodInsn(
+              INVOKESTATIC,
+              mainInternal,
+              recordValidatorName(environment.findRecord(recordName.name()).orElseThrow()),
+              "(" + descriptor(recordName) + "Ljava/lang/String;)V",
+              false);
+          context.method.visitLabel(skip);
+        }
+        continue;
+      }
+      if (Type.STRING.equals(type)) {
+        context.method.visitVarInsn(ALOAD, slot);
+        context.method.visitLdcInsn(path);
+        context.method.visitMethodInsn(
+            INVOKESTATIC,
+            BOUNDARY,
+            "requireNonNull",
+            "(Ljava/lang/Object;Ljava/lang/String;)V",
+            false);
+        continue;
+      }
+      if (type instanceof Type.Nominal nominal) {
+        RecordType record = environment.findRecord(nominal.name()).orElse(null);
+        context.method.visitVarInsn(ALOAD, slot);
+        context.method.visitLdcInsn(path);
+        if (record != null) {
+          context.method.visitMethodInsn(
+              INVOKESTATIC,
+              mainInternal,
+              recordValidatorName(record),
+              "(" + descriptor(type) + "Ljava/lang/String;)V",
+              false);
+        } else {
+          context.method.visitMethodInsn(
+              INVOKESTATIC,
+              BOUNDARY,
+              "requireNonNull",
+              "(Ljava/lang/Object;Ljava/lang/String;)V",
+              false);
+        }
+      }
+    }
+  }
+
+  private Type.Nominal recordNominal(Type type) {
+    if (!(type instanceof Type.Nominal nominal)) {
+      return null;
+    }
+    return environment.findRecord(nominal.name()).isPresent() ? nominal : null;
+  }
+
+  private void generateRecordValidators(ClassWriter writer) {
+    for (RecordType record : environment.records()) {
+      recordValidatorName(record);
+    }
+    for (RecordType record : environment.records()) {
+      String validator = recordValidatorName(record);
+      MethodVisitor method =
+          writer.visitMethod(
+              ACC_PUBLIC | ACC_STATIC,
+              validator,
+              "(" + record.descriptor() + "Ljava/lang/String;)V",
+              null,
+              null);
+      method.visitCode();
+      method.visitVarInsn(ALOAD, 0);
+      method.visitVarInsn(ALOAD, 1);
+      method.visitMethodInsn(
+          INVOKESTATIC,
+          BOUNDARY,
+          "requireNonNull",
+          "(Ljava/lang/Object;Ljava/lang/String;)V",
+          false);
+      for (RecordType.Field field : record.fields()) {
+        String path = record.name() + "." + field.name();
+        if (field.type() instanceof Type.Nullable nullable) {
+          Type.Nominal nested = recordNominal(nullable.inner());
+          if (nested == null) {
+            continue;
+          }
+          Label skip = new Label();
+          loadRecordField(method, record, field);
+          method.visitJumpInsn(IFNULL, skip);
+          loadRecordField(method, record, field);
+          method.visitLdcInsn(path);
+          method.visitMethodInsn(
+              INVOKESTATIC,
+              mainInternal,
+              recordValidatorName(environment.findRecord(nested.name()).orElseThrow()),
+              "(" + descriptor(nested) + "Ljava/lang/String;)V",
+              false);
+          method.visitLabel(skip);
+          continue;
+        }
+        if (Type.STRING.equals(field.type())
+            || (field.descriptor().startsWith("L")
+                && (Type.NUMBER.equals(field.type())
+                    || Type.BOOLEAN.equals(field.type())))) {
+          loadRecordField(method, record, field);
+          method.visitLdcInsn(path);
+          method.visitMethodInsn(
+              INVOKESTATIC,
+              BOUNDARY,
+              "requireNonNull",
+              "(Ljava/lang/Object;Ljava/lang/String;)V",
+              false);
+          continue;
+        }
+        if (field.type() instanceof Type.Nominal nominal) {
+          RecordType nested = environment.findRecord(nominal.name()).orElse(null);
+          loadRecordField(method, record, field);
+          method.visitLdcInsn(path);
+          if (nested != null) {
+            method.visitMethodInsn(
+                INVOKESTATIC,
+                mainInternal,
+                recordValidatorName(nested),
+                "(" + nested.descriptor() + "Ljava/lang/String;)V",
+                false);
+          } else {
+            method.visitMethodInsn(
+                INVOKESTATIC,
+                BOUNDARY,
+                "requireNonNull",
+                "(Ljava/lang/Object;Ljava/lang/String;)V",
+                false);
+          }
+        }
+      }
+      method.visitInsn(RETURN);
+      method.visitMaxs(0, 0);
+      method.visitEnd();
+    }
+  }
+
+  private void loadRecordField(
+      MethodVisitor method, RecordType record, RecordType.Field field) {
+    method.visitVarInsn(ALOAD, 0);
+    method.visitMethodInsn(
+        INVOKEVIRTUAL,
+        record.internalName(),
+        field.name(),
+        "()" + field.descriptor(),
+        false);
+  }
+
+  private String recordValidatorName(RecordType record) {
+    return recordValidatorNames.computeIfAbsent(
+        record.name(), name -> "validate$" + recordValidatorNames.size());
   }
 
   private void generateLiteralClass(ObjectLiteralInfo literal) {
@@ -285,16 +478,22 @@ public final class CodeGenerator {
         writer.visitMethod(ACC_PUBLIC, methodNames.get(field), descriptor, null, null);
     method.visitCode();
 
-    int baseSlot = 1 + slotSize(ENV_DESCRIPTOR);
+    int baseSlot = 1 + slotSize(programDescriptor()) + slotSize(ENV_DESCRIPTOR);
     for (Type parameter : erased.parameters()) {
       baseSlot += slotSize(descriptor(parameter));
     }
     MethodContext context =
-        new MethodContext(method, descriptor(erased.returnType()), declared.returnType(), 1);
+        new MethodContext(
+            method,
+            descriptor(erased.returnType()),
+            declared.returnType(),
+            2,
+            1,
+            false);
     context.nextSlot = baseSlot;
 
     int offset = declared.receiver() == null ? 0 : 1;
-    int erasedSlot = 1 + slotSize(ENV_DESCRIPTOR);
+    int erasedSlot = 1 + slotSize(programDescriptor()) + slotSize(ENV_DESCRIPTOR);
     for (int i = 0; i < erased.parameters().size(); i++) {
       Type erasedParameter = erased.parameters().get(i);
       Type declaredParameter = declared.parameters().get(i);
@@ -353,14 +552,16 @@ public final class CodeGenerator {
 
   private void compileVariable(VariableDeclaration declaration, MethodContext context) {
     VariableSymbol symbol = checked.variableDeclarations.get(declaration);
-    Type actual = compileExpression(declaration.initializer(), context);
     if (symbol.topLevelField()) {
+      emitProgram(context);
+      Type actual = compileExpression(declaration.initializer(), context);
       emitCoerceToDescriptor(actual, descriptor(symbol.type()), context);
       context.method.visitFieldInsn(
-          PUTSTATIC, mainInternal, topLevelFieldNames.get(symbol), descriptor(symbol.type()));
+          PUTFIELD, mainInternal, topLevelFieldNames.get(symbol), descriptor(symbol.type()));
       return;
     }
 
+    Type actual = compileExpression(declaration.initializer(), context);
     int slot = context.allocate(symbol.type());
     context.slots.put(symbol, slot);
     emitCoerce(actual, symbol.type(), context);
@@ -452,8 +653,9 @@ public final class CodeGenerator {
     }
     String storageDescriptor = descriptor(variable.type());
     if (variable.topLevelField()) {
+      emitProgram(context);
       context.method.visitFieldInsn(
-          GETSTATIC, mainInternal, topLevelFieldNames.get(variable), storageDescriptor);
+          GETFIELD, mainInternal, topLevelFieldNames.get(variable), storageDescriptor);
     } else {
       Integer slot = context.slots.get(variable);
       if (slot == null) {
@@ -469,12 +671,25 @@ public final class CodeGenerator {
     FieldAccess access = checked.memberAccesses.get(member);
     Type objectType = compileExpression(member.object(), context);
     emitCoerce(objectType, access.objectType(), context);
-    String fieldDescriptor = descriptor(access.field().type());
-    context.method.visitFieldInsn(
-        GETFIELD,
-        baseNames.get(access.owner()),
-        fieldNames.get(access.field()),
-        fieldDescriptor);
+    RecordType record = environment.findRecord(access.owner().name()).orElse(null);
+    String fieldDescriptor;
+    if (record != null) {
+      RecordType.Field recordField = record.field(access.field().name());
+      fieldDescriptor = recordField.descriptor();
+      context.method.visitMethodInsn(
+          INVOKEVIRTUAL,
+          record.internalName(),
+          recordField.name(),
+          "()" + fieldDescriptor,
+          false);
+    } else {
+      fieldDescriptor = descriptor(access.field().type());
+      context.method.visitFieldInsn(
+          GETFIELD,
+          baseNames.get(access.owner()),
+          fieldNames.get(access.field()),
+          fieldDescriptor);
+    }
     emitDescriptorToType(fieldDescriptor, access.storageType(), context);
     emitCoerce(access.storageType(), expected, context);
   }
@@ -482,17 +697,21 @@ public final class CodeGenerator {
   private void compileAssignment(AssignmentExpression assignment, MethodContext context) {
     if (assignment.target() instanceof Identifier identifier) {
       VariableSymbol symbol = (VariableSymbol) checked.identifiers.get(identifier);
+      String storageDescriptor = descriptor(symbol.type());
+      if (symbol.topLevelField()) {
+        emitProgram(context);
+        Type valueType = compileExpression(assignment.value(), context);
+        emitCoerce(valueType, symbol.type(), context);
+        duplicateUnder(storageDescriptor, context);
+        context.method.visitFieldInsn(
+            PUTFIELD, mainInternal, topLevelFieldNames.get(symbol), storageDescriptor);
+        return;
+      }
       Type valueType = compileExpression(assignment.value(), context);
       emitCoerce(valueType, symbol.type(), context);
-      String storageDescriptor = descriptor(symbol.type());
       duplicate(storageDescriptor, context);
-      if (symbol.topLevelField()) {
-        context.method.visitFieldInsn(
-            PUTSTATIC, mainInternal, topLevelFieldNames.get(symbol), storageDescriptor);
-      } else {
-        Integer slot = context.slots.get(symbol);
-        context.method.visitVarInsn(storeOpcode(storageDescriptor), slot);
-      }
+      Integer slot = context.slots.get(symbol);
+      context.method.visitVarInsn(storeOpcode(storageDescriptor), slot);
       return;
     }
 
@@ -703,6 +922,7 @@ public final class CodeGenerator {
     CallTarget target = checked.calls.get(call);
     if (target instanceof CallTarget.StaticFunction staticCall) {
       FunctionSymbol function = staticCall.symbol();
+      emitProgram(context);
       loadEnvironment(context);
       for (int i = 0; i < call.arguments().size(); i++) {
         Type argumentType = compileExpression(call.arguments().get(i), context);
@@ -711,7 +931,7 @@ public final class CodeGenerator {
       }
       String descriptor = functionDescriptor(function);
       context.method.visitMethodInsn(
-          INVOKESTATIC, mainInternal, functionNames.get(function), descriptor, false);
+          INVOKEVIRTUAL, mainInternal, functionNames.get(function), descriptor, false);
       emitDescriptorToType(descriptor(function.returnType()), function.returnType(), context);
       return;
     }
@@ -720,6 +940,7 @@ public final class CodeGenerator {
       MemberExpression member = (MemberExpression) call.callee();
       Type receiverType = compileExpression(member.object(), context);
       emitCoerce(receiverType, methodCall.receiverType(), context);
+      emitProgram(context);
       loadEnvironment(context);
       String descriptor = functionDescriptor(methodCall.declaredType());
       for (int i = 0; i < call.arguments().size(); i++) {
@@ -798,9 +1019,27 @@ public final class CodeGenerator {
     context.method.visitVarInsn(ALOAD, context.envSlot);
   }
 
+  private void emitProgram(MethodContext context) {
+    context.method.visitVarInsn(ALOAD, context.programIsThis ? 0 : context.programSlot);
+  }
+
   private void compileObjectLiteral(ObjectLiteral literal, MethodContext context) {
     ObjectLiteralInfo info = checked.objectLiterals.get(literal);
     ObjectTypeInfo owner = info.objectType();
+    RecordType record = environment.findRecord(owner.name()).orElse(null);
+    if (record != null) {
+      context.method.visitTypeInsn(NEW, record.internalName());
+      context.method.visitInsn(DUP);
+      for (RecordType.Field field : record.fields()) {
+        Expression value = info.values().get(field.name());
+        Type valueType = compileExpression(value, context);
+        emitCoerceToDescriptor(valueType, field.descriptor(), context);
+      }
+      context.method.visitMethodInsn(
+          INVOKESPECIAL, record.internalName(), "<init>", record.constructorDescriptor(), false);
+      return;
+    }
+
     String className;
     if (owner.hasMethods()) {
       className = literalName(info);
@@ -854,12 +1093,17 @@ public final class CodeGenerator {
   }
 
   private String functionDescriptor(Type.Function function) {
-    StringBuilder descriptor = new StringBuilder("(").append(ENV_DESCRIPTOR);
+    StringBuilder descriptor =
+        new StringBuilder("(").append(programDescriptor()).append(ENV_DESCRIPTOR);
     for (Type parameter : function.parameters()) {
       descriptor.append(descriptor(parameter));
     }
     descriptor.append(')').append(descriptor(function.returnType()));
     return descriptor.toString();
+  }
+
+  private String programDescriptor() {
+    return "L" + mainInternal + ";";
   }
 
   private String descriptor(Type type) {
@@ -875,6 +1119,10 @@ public final class CodeGenerator {
       return "Ljava/lang/Object;";
     }
     if (type instanceof Type.Nominal nominal) {
+      RecordType record = environment.findRecord(nominal.name()).orElse(null);
+      if (record != null) {
+        return record.descriptor();
+      }
       NativeType nativeType = environment.findType(nominal.name()).orElse(null);
       if (nativeType != null) {
         return "L" + nativeType.internalName() + ";";
@@ -1071,6 +1319,10 @@ public final class CodeGenerator {
     context.method.visitInsn(slotSize(descriptor) == 2 ? DUP2 : DUP);
   }
 
+  private void duplicateUnder(String descriptor, MethodContext context) {
+    context.method.visitInsn(slotSize(descriptor) == 2 ? DUP2_X1 : DUP_X1);
+  }
+
   private void pop(Type type, MethodContext context) {
     context.method.visitInsn(slotSize(descriptor(type)) == 2 ? POP2 : POP);
   }
@@ -1139,16 +1391,25 @@ public final class CodeGenerator {
     private final String returnDescriptor;
     private final Type declaredReturnType;
     private final int envSlot;
+    private final int programSlot;
+    private final boolean programIsThis;
     private final Map<VariableSymbol, Integer> slots = new IdentityHashMap<>();
     private final Deque<LoopLabels> loops = new ArrayDeque<>();
     private int nextSlot;
 
     private MethodContext(
-        MethodVisitor method, String returnDescriptor, Type declaredReturnType, int envSlot) {
+        MethodVisitor method,
+        String returnDescriptor,
+        Type declaredReturnType,
+        int envSlot,
+        int programSlot,
+        boolean programIsThis) {
       this.method = method;
       this.returnDescriptor = returnDescriptor;
       this.declaredReturnType = declaredReturnType;
       this.envSlot = envSlot;
+      this.programSlot = programSlot;
+      this.programIsThis = programIsThis;
     }
 
     private int allocate(Type type) {

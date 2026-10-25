@@ -35,6 +35,7 @@ public final class Lexer {
         String text = source.substring(start, index);
         TokenType type =
             switch (text) {
+              case "export" -> TokenType.EXPORT;
               case "function" -> TokenType.FUNCTION;
               case "return" -> TokenType.RETURN;
               case "type" -> TokenType.TYPE;

@@ -15,9 +15,10 @@ final class BeanShellLogClassification {
       throw new IllegalStateException("Could not compile BeanShell workload", error);
     }
 
-    return (count, out) ->
-        interpreter
-            .getNameSpace()
-            .invokeMethod("runWorkload", new Object[] {count, out}, interpreter);
+    return count ->
+        (String)
+            interpreter
+                .getNameSpace()
+                .invokeMethod("runWorkload", new Object[] {count}, interpreter);
   }
 }

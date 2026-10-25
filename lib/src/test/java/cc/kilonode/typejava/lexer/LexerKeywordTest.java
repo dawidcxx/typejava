@@ -10,11 +10,12 @@ class LexerKeywordTest {
   void recognizesKeywords() {
     List<Token> tokens =
         new Lexer(
-                "function return type let const readonly if else while break continue true false null")
+                "export function return type let const readonly if else while break continue true false null")
             .tokenize();
 
     assertEquals(
         List.of(
+            TokenType.EXPORT,
             TokenType.FUNCTION,
             TokenType.RETURN,
             TokenType.TYPE,

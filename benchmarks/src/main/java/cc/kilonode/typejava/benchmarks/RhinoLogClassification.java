@@ -22,10 +22,10 @@ final class RhinoLogClassification {
         throw new IllegalStateException("Rhino workload is missing runWorkload");
       }
 
-      return (count, out) -> {
+      return count -> {
         Context runContext = Context.enter();
         try {
-          function.call(runContext, scope, scope, new Object[] {count, out});
+          return (String) function.call(runContext, scope, scope, new Object[] {count});
         } finally {
           Context.exit();
         }

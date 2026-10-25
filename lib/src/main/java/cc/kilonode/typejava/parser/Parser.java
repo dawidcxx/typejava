@@ -107,8 +107,11 @@ public final class Parser {
   }
 
   private Statement statement() {
+    if (check(TokenType.EXPORT)) {
+      return exportedFunctionDeclaration();
+    }
     if (check(TokenType.FUNCTION)) {
-      return functionDeclaration();
+      return functionDeclaration(false, peek());
     }
     if (check(TokenType.LET) || check(TokenType.CONST)) {
       return variableDeclaration();
@@ -134,8 +137,15 @@ public final class Parser {
     return expressionStatement();
   }
 
-  private FunctionDeclaration functionDeclaration() {
-    Token start = peek();
+  private FunctionDeclaration exportedFunctionDeclaration() {
+    Token start = advance();
+    if (!check(TokenType.FUNCTION)) {
+      throw error(peek(), "Expected 'function' after 'export'");
+    }
+    return functionDeclaration(true, start);
+  }
+
+  private FunctionDeclaration functionDeclaration(boolean exported, Token start) {
     consume(TokenType.FUNCTION, "Expected 'function'");
     Token name = consume(TokenType.IDENTIFIER, "Expected function name after 'function'");
     consume(TokenType.LPAREN, "Expected '(' after function name");
@@ -148,7 +158,9 @@ public final class Parser {
         TokenType.SEMICOLON,
         "Expected ';' after function declaration (maybe you forgot a semicolon)");
 
-    return located(new FunctionDeclaration(name.lexeme(), parameters, returnType, body), start);
+    return located(
+        new FunctionDeclaration(name.lexeme(), parameters, returnType, body, exported),
+        start);
   }
 
   private VariableDeclaration variableDeclaration() {

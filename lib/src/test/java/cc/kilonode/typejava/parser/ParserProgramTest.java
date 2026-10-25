@@ -41,7 +41,8 @@ class ParserProgramTest {
                         List.of(
                             new ReturnStatement(
                                 new BinaryExpression(
-                                    new Identifier("a"), "+", new Identifier("b")))))),
+                                    new Identifier("a"), "+", new Identifier("b"))))),
+                    false),
                 new ExpressionStatement(
                     new CallExpression(
                         new MemberExpression(new Identifier("console"), "log"),
@@ -66,6 +67,15 @@ class ParserProgramTest {
     assertInstanceOf(IfStatement.class, function.body().statements().get(3));
     assertInstanceOf(ReturnStatement.class, function.body().statements().get(4));
     assertEquals(2, program.statements().size());
+  }
+
+  @Test
+  void parsesExportedFunctionDeclaration() {
+    Program program = parse("export function answer(): number { return 42; };");
+
+    FunctionDeclaration function = (FunctionDeclaration) program.statements().get(0);
+    assertEquals("answer", function.name());
+    assertEquals(true, function.exported());
   }
 
   @Test

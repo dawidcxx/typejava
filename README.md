@@ -27,11 +27,11 @@ idiomatically in each language. Script parsing/compilation is excluded; each imp
 
 | Implementation | Time per operation | Throughput | Relative to Java |
 |---|---:|---:|---:|
-| Plain Java | 0.308 ± 0.004 ms | ~32.5M logs/s | 1.00x |
-| TypeJava | 0.368 ± 0.003 ms | ~27.2M logs/s | 1.19x |
-| Rhino (JavaScript) | 2.727 ± 0.031 ms | ~3.67M logs/s | 8.9x |
-| Groovy | 3.276 ± 0.022 ms | ~3.05M logs/s | 10.6x |
-| BeanShell | 129.444 ± 1.374 ms | ~77k logs/s | 420x |
+| Plain Java | 0.308 ± 0.002 ms | ~32.5M logs/s | 1.00x |
+| TypeJava | 0.365 ± 0.002 ms | ~27.4M logs/s | 1.19x |
+| Rhino (JavaScript) | 2.651 ± 0.028 ms | ~3.77M logs/s | 8.6x |
+| Groovy | 3.302 ± 0.029 ms | ~3.03M logs/s | 10.7x |
+| BeanShell | 128.297 ± 0.554 ms | ~78k logs/s | 417x |
 
 Times are averages with 99.9% confidence intervals. Results are machine- and JVM-dependent, and
 relative factors vary by a few percent between runs.
@@ -64,7 +64,7 @@ repositories {
 }
 
 dependencies {
-    implementation("cc.kilonode:typejava:0.2.0")
+    implementation("cc.kilonode:typejava:0.4.0")
 }
 ```
 
@@ -85,7 +85,7 @@ Then depend on it:
 <dependency>
   <groupId>cc.kilonode</groupId>
   <artifactId>typejava</artifactId>
-  <version>0.2.0</version>
+  <version>0.4.0</version>
 </dependency>
 ```
 
@@ -98,7 +98,7 @@ packages.
 Download `typejava-<version>-all.jar` from Releases:
 
 ```bash
-java -jar typejava-0.2.0-all.jar script.tj
+java -jar typejava-0.4.0-all.jar script.tj
 ```
 
 ### Java API
@@ -123,10 +123,45 @@ program.run();
 
 `Io` controls console output; when no implementation is supplied the environment uses
 `DefaultIo`, which writes to `System.out`. `withStd()` binds `TjArray` and `TjMap`; without it those
-types are unavailable. `TypeJava.compile` parses, checks, and generates bytecode once;
-`CompiledProgram.run` executes that bytecode without recompiling. Use it when running the same
-script repeatedly. Compiled programs are reusable but not thread-safe. Runtime exceptions from the
-generated program are allowed to escape unchanged.
+types are unavailable. `TypeJava.compile` parses, checks, and generates bytecode once.
+`CompiledProgram` is immutable and reusable; `program.run()` executes top-level initialization in a
+fresh instance. Runtime exceptions from the generated program are allowed to escape unchanged.
+
+### Exported functions
+
+Java records can be bound as readonly TypeJava types, and top-level `export function` declarations
+can be invoked from Java:
+
+```java
+public record Payload(double incrementMe) {}
+
+public interface LogApi {
+  Payload analyzeLog(Payload payload);
+}
+
+Environment environment = TypeJava.environment()
+    .record(Payload.class)
+    .exports(LogApi.class)
+    .build();
+
+String source = """
+    let invocations: number = 0;
+
+    export function analyzeLog(payload: Payload): Payload {
+      invocations = invocations + 1;
+      return { incrementMe: payload.incrementMe + 1 };
+    };
+    """;
+
+CompiledProgram program = TypeJava.compile(source, environment);
+ProgramInstance instance = program.instantiate();
+LogApi api = instance.exports(LogApi.class);
+Payload result = api.analyzeLog(new Payload(0));
+```
+
+Each `instantiate()` call owns isolated top-level state. A `ProgramInstance` is not thread-safe;
+create one per thread. Reference record components are non-null by default; annotate a component
+with `@MaybeNull` to map it to `T | null`.
 
 ## Example
 

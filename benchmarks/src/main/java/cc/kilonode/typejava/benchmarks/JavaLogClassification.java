@@ -1,6 +1,5 @@
 package cc.kilonode.typejava.benchmarks;
 
-import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,7 +13,7 @@ final class JavaLogClassification {
 
   private JavaLogClassification() {}
 
-  static String run(int count, PrintStream out) {
+  static String run(int count) {
     List<UpstreamLog> logs = new ArrayList<>();
 
     for (int i = 0; i < count; i++) {
@@ -44,21 +43,18 @@ final class JavaLogClassification {
     }
 
     int warnings = severityCounts.getOrDefault("warning", 0);
-    String summary =
-        "logs="
-            + logs.size()
-            + " critical="
-            + critical
-            + " warnings="
-            + warnings
-            + " page="
-            + pageable
-            + " severities="
-            + severityCounts.size()
-            + " actions="
-            + actionCounts.size();
-    out.println(summary);
-    return summary;
+    return "logs="
+        + logs.size()
+        + " critical="
+        + critical
+        + " warnings="
+        + warnings
+        + " page="
+        + pageable
+        + " severities="
+        + severityCounts.size()
+        + " actions="
+        + actionCounts.size();
   }
 
   private static Double levelAt(int index) {

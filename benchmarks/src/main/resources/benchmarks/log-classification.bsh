@@ -1,4 +1,3 @@
-import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -140,7 +139,7 @@ void increment(Map counts, String key) {
   }
 }
 
-String runWorkload(int count, PrintStream out) {
+String runWorkload(int count) {
   List logs = new ArrayList(count);
 
   for (int i = 0; i < count; i++) {
@@ -174,9 +173,7 @@ String runWorkload(int count, PrintStream out) {
 
   Integer warnings = (Integer) severityCounts.get("warning");
   int warningCount = warnings == null ? 0 : warnings.intValue();
-  String summary = "logs=" + logs.size() + " critical=" + critical + " warnings=" + warningCount
+  return "logs=" + logs.size() + " critical=" + critical + " warnings=" + warningCount
       + " page=" + pageable + " severities=" + severityCounts.size()
       + " actions=" + actionCounts.size();
-  out.println(summary);
-  return summary;
 }

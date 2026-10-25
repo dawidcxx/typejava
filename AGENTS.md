@@ -132,12 +132,15 @@ present and the version is not a `-SNAPSHOT`. This prevents accidental snapshot 
 ## Architecture
 
 - `:lib` `lexer/`, `parser/`, `ast/` — front end
-- `:lib` `checker/` — nominal type checking, null narrowing, resolved symbols/types
+- `:lib` `checker/` — nominal type checking, null narrowing, resolved symbols/types, record
+  bindings, and export signature validation
 - `:lib` `codegen/` — ASM generation; object types get an abstract base class per nominal type and
-  a subclass per method-bearing object-literal site
-- `:lib` `runtime/` — `Console`, `TjArray`, `TjMap`, and value formatting
-- `:lib` `TypeJava` / `CompiledProgram` — public `compile`/`run`/`runFile` API and generated
-  classloader
+  a subclass per method-bearing object-literal site; record-bound types use the host record class;
+  generated programs are instance-based with isolated top-level state
+- `:lib` `runtime/` — `Console`, `TjArray`, `TjMap`, `Boundary`, and value formatting
+- `:lib` `TypeJava` / `CompiledProgram` / `ProgramInstance` — public `compile`/`run`/`runFile`,
+  `instantiate`, and exported-function bridge API plus the generated classloader
+- `:lib` `Environment` — `Io`, native types, record bindings, and expected export interfaces
 - `:cli` `Main` — argument parsing, file execution, usage, and exit codes
 - `:examples` `Main` — loads `.tj` resources and demonstrates only the public `TypeJava` API
 - `:benchmarks` — precompiles/parses every language workload in JMH setup so script compilation is

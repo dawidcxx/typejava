@@ -22,18 +22,20 @@ numbers are indicative rather than a strictly normalized code-generation compari
 
 - Compilation/parsing is **not** measured. Every implementation is prepared once in `@Setup`,
   outside the measured region:
-  - TypeJava uses the public `TypeJava.compile` API and a reusable `CompiledProgram`;
-  - Groovy is parsed once into a `Script`;
-  - BeanShell is evaluated once into an `Interpreter` namespace;
-  - Rhino is compiled once into a `Script` and invoked as a function;
+  - TypeJava uses the public `TypeJava.compile` API, instantiates the program once, and invokes
+    its exported `runWorkload` function through a typed export bridge;
+  - Groovy is parsed once into a `Script` and its `runWorkload` method is invoked;
+  - BeanShell is evaluated once into an `Interpreter` namespace and its `runWorkload` method is
+    invoked;
+  - Rhino is compiled once into a `Script` and its `runWorkload` function is invoked;
   - Java has no preparation step.
 - Every implementation runs 1,000 warmup executions in `@Setup` so the JVM JIT compiles hot paths
   before JMH starts. Override the count in forked JVMs with
   `-jvmArgsAppend -Dtj.benchmark.warmups=N`.
 - JMH then applies its own warmup and measurement phases:
   `@Fork(1)`, 5 x 1 s warmup, 10 x 1 s measurement, average time in milliseconds.
-- Console output goes to a null output stream, so formatting is included but disk/terminal I/O is
-  not.
+- Every implementation returns the one-line summary directly to the harness. No console or
+  `PrintStream` work is included in the measured region.
 - Results are platform- and JVM-dependent. Compare runs on the same machine and JDK 21.
 
 ## Current results
@@ -42,11 +44,11 @@ Recorded on JDK 21, JMH 1.37, single fork and thread. One operation is one full 
 
 | Implementation | Time per operation | Throughput | Relative to Java |
 |---|---:|---:|---:|
-| Plain Java | 0.308 ± 0.004 ms | ~32.5M logs/s | 1.00x |
-| TypeJava | 0.368 ± 0.003 ms | ~27.2M logs/s | 1.19x |
-| Rhino (JavaScript) | 2.727 ± 0.031 ms | ~3.67M logs/s | 8.9x |
-| Groovy | 3.276 ± 0.022 ms | ~3.05M logs/s | 10.6x |
-| BeanShell | 129.444 ± 1.374 ms | ~77k logs/s | 420x |
+| Plain Java | 0.308 ± 0.002 ms | ~32.5M logs/s | 1.00x |
+| TypeJava | 0.365 ± 0.002 ms | ~27.4M logs/s | 1.19x |
+| Rhino (JavaScript) | 2.651 ± 0.028 ms | ~3.77M logs/s | 8.6x |
+| Groovy | 3.302 ± 0.029 ms | ~3.03M logs/s | 10.7x |
+| BeanShell | 128.297 ± 0.554 ms | ~78k logs/s | 417x |
 
 Relative factors vary by a few percent between JVM forks.
 
@@ -93,6 +95,7 @@ nix develop --command gradle :lib:generatePomFileForMavenPublication
 - `src/main/resources/benchmarks/log-classification.bsh` — BeanShell workload
 - `src/main/resources/benchmarks/log-classification.js` — Rhino workload
 - `src/main/java/.../JavaLogClassification.java` — plain Java workload
+- `src/main/java/.../TypeJavaLogClassification.java` — TypeJava export bridge adapter
 - `src/main/java/.../GroovyLogClassification.java` — Groovy adapter
 - `src/main/java/.../BeanShellLogClassification.java` — BeanShell adapter
 - `src/main/java/.../RhinoLogClassification.java` — Rhino adapter

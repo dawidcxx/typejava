@@ -121,7 +121,7 @@ function classify(log) {
   };
 }
 
-function runWorkload(count, out) {
+function runWorkload(count) {
   var logs = [];
 
   for (var i = 0; i < count; i++) {
@@ -152,12 +152,10 @@ function runWorkload(count, out) {
   }
 
   var warnings = severityCounts["warning"] || 0;
-  var summary = "logs=" + logs.length
+  return "logs=" + logs.length
       + " critical=" + critical
       + " warnings=" + warnings
       + " page=" + pageable
       + " severities=" + Object.keys(severityCounts).length
       + " actions=" + Object.keys(actionCounts).length;
-  out.println(summary);
-  return summary;
 }
