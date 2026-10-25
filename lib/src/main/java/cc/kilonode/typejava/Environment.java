@@ -64,6 +64,16 @@ public final class Environment {
     return exportInterfaces;
   }
 
+  /**
+   * Generates ambient TypeScript declarations for the native types, bound records, and export
+   * contracts in this environment.
+   *
+   * @return TypeScript declaration file contents
+   */
+  public String typeScriptDeclarations() {
+    return TypeScriptDeclarations.generate(this);
+  }
+
   public static final class Builder {
     private final Map<String, NativeType> types = new LinkedHashMap<>();
     private final Map<String, Class<?>> recordClasses = new LinkedHashMap<>();

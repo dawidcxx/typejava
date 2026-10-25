@@ -5,7 +5,21 @@
 TypeJava is a small TypeScript-flavoured language that compiles to JVM bytecode with ASM. The
 pipeline is lexer -> parser -> checker -> ASM code generator -> generated classloader.
 
-Keep `README.md` user-facing. Put development, release, CI, and maintenance details here.
+Keep `README.md` a short user-facing landing page. Put language semantics in `TJ_GUIDE.md`, Java
+integration and tooling in `IMPLEMENTATORS_GUIDE.md`, and development, release, CI, and maintenance
+details here.
+
+## Documentation
+
+- `README.md` — who TypeJava is for, the short pitch, install, and links to the guides.
+- `TJ_GUIDE.md` — language syntax, type system, nulls, objects, collections, and TypeScript
+  differences. Assumes some TypeScript familiarity.
+- `IMPLEMENTATORS_GUIDE.md` — Java embedding, compile/instantiate lifecycle, exports, record
+  bindings, native types, declaration generation, and boundary semantics.
+- `benchmarks/README.md` — workload, methodology, current results, and benchmark commands.
+- `AGENTS.md` — build, test, release, CI, architecture, and maintainer constraints.
+
+Do not grow `README.md` into a language or integration manual; extend the appropriate guide instead.
 
 ## Modules
 
@@ -140,7 +154,8 @@ present and the version is not a `-SNAPSHOT`. This prevents accidental snapshot 
 - `:lib` `runtime/` — `Console`, `TjArray`, `TjMap`, `Boundary`, and value formatting
 - `:lib` `TypeJava` / `CompiledProgram` / `ProgramInstance` — public `compile`/`run`/`runFile`,
   `instantiate`, and exported-function bridge API plus the generated classloader
-- `:lib` `Environment` — `Io`, native types, record bindings, and expected export interfaces
+- `:lib` `Environment` — `Io`, native types, record bindings, expected export interfaces, and
+  TypeScript declaration generation
 - `:cli` `Main` — argument parsing, file execution, usage, and exit codes
 - `:examples` `Main` — loads `.tj` resources and demonstrates only the public `TypeJava` API
 - `:benchmarks` — precompiles/parses every language workload in JMH setup so script compilation is
