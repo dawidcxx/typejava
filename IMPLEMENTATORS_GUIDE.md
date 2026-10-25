@@ -82,12 +82,35 @@ no explicit close operation.
 `runFile(Path, Environment)` is a convenience for reading a source file and running it. It throws
 `IOException` if the file cannot be read.
 
+### Check without running
+
+Use `check` to validate source without creating or running a program instance. This is useful for
+editor diagnostics and save-time validation:
+
+```java
+List<Diagnostic> diagnostics = TypeJava.check(source, environment);
+for (Diagnostic diagnostic : diagnostics) {
+  System.out.println(
+      diagnostic.line() + ":" + diagnostic.column() + " " + diagnostic.message());
+}
+```
+
+An empty list means the program passed the full compile pipeline and would compile. The current
+compiler is fail-fast, so the list contains at most one diagnostic, but callers should treat it as a
+list because later versions may report more. A successful check does not run top-level statements,
+and the program may still fail at runtime.
+
+`checkFile(Path, Environment)` reads and checks a `.tj` file. It also returns diagnostics and throws
+`IOException` if the file cannot be read.
+
 ### Public API at a glance
 
 | API | Purpose |
 |---|---|
 | `TypeJava.run(source, environment)` | Compile and run one instance. |
 | `TypeJava.compile(source, environment)` | Parse, check, and generate bytecode once. |
+| `TypeJava.check(source, environment)` | Validate without running; returns diagnostics. |
+| `TypeJava.checkFile(path, environment)` | Read and validate a `.tj` file; returns diagnostics. |
 | `TypeJava.runFile(path, environment)` | Read, compile, and run a `.tj` file. |
 | `CompiledProgram.run()` | Instantiate and run, discarding the instance. |
 | `CompiledProgram.instantiate()` | Create an isolated `ProgramInstance`. |

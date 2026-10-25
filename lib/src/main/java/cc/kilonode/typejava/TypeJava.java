@@ -1,9 +1,12 @@
 package cc.kilonode.typejava;
 
+import cc.kilonode.typejava.checker.CheckException;
 import cc.kilonode.typejava.checker.CheckedProgram;
 import cc.kilonode.typejava.checker.Checker;
 import cc.kilonode.typejava.codegen.CodeGenerator;
 import cc.kilonode.typejava.lexer.Lexer;
+import cc.kilonode.typejava.lexer.LexerException;
+import cc.kilonode.typejava.parser.ParseException;
 import cc.kilonode.typejava.parser.ParseResult;
 import cc.kilonode.typejava.parser.Parser;
 import java.io.IOException;
@@ -95,6 +98,44 @@ public final class TypeJava {
     } catch (ReflectiveOperationException exception) {
       throw new IllegalStateException("Could not load generated TypeJava program", exception);
     }
+  }
+
+  /**
+   * Checks TypeJava source without running it.
+   *
+   * <p>Runs the full compile pipeline and returns an empty list when the program compiles. The
+   * compiler is fail-fast, so the list contains at most one diagnostic.
+   *
+   * @param source TypeJava source
+   * @param environment environment used to check the program
+   * @return diagnostics, empty when the source compiles
+   */
+  public static List<Diagnostic> check(String source, Environment environment) {
+    try {
+      compile(source, environment);
+      return List.of();
+    } catch (LexerException exception) {
+      return List.of(
+          new Diagnostic(exception.getMessage(), exception.getLine(), exception.getColumn()));
+    } catch (ParseException exception) {
+      return List.of(
+          new Diagnostic(exception.getMessage(), exception.getLine(), exception.getColumn()));
+    } catch (CheckException exception) {
+      return List.of(
+          new Diagnostic(exception.getMessage(), exception.getLine(), exception.getColumn()));
+    }
+  }
+
+  /**
+   * Reads and checks a TypeJava source file without running it.
+   *
+   * @param path source file
+   * @param environment environment used to check the program
+   * @return diagnostics, empty when the source compiles
+   * @throws IOException if the file cannot be read
+   */
+  public static List<Diagnostic> checkFile(Path path, Environment environment) throws IOException {
+    return check(Files.readString(path), environment);
   }
 
   /**

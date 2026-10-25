@@ -64,7 +64,7 @@ repositories {
 }
 
 dependencies {
-    implementation("cc.kilonode:typejava:0.5.0")
+    implementation("cc.kilonode:typejava:0.6.0")
 }
 ```
 
@@ -80,7 +80,7 @@ export GITHUB_TOKEN=ghp_your_read_packages_token
 Download the self-contained CLI jar and run a script:
 
 ```bash
-java -jar typejava-0.5.0-all.jar script.tj
+java -jar typejava-0.6.0-all.jar script.tj
 ```
 
 ## Get started
